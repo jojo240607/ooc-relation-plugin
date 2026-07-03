@@ -1,5 +1,9 @@
 # OOC Relation Plugin
 
+![](resources/ooc-icon.svg)
+
+
+
 面向对象 C（OOC）编程的 Visual Studio Code 扩展，提供类继承管理、虚函数、成员添加、PlantUML 类图生成等功能，基于轻量级关系表，无需全局扫描项目文件。
 
 ## 主要功能
@@ -46,10 +50,64 @@
 | `OOC: Add Members` | 添加成员变量（右键 .h 文件） |
 | `OOC: Show Class Diagram` | 生成 PlantUML 类图（可通过树视图节点调用） |
 
-### 侧边栏视图
+### 创建一个对象
+空白处右键点击，选择OOC：Create Class  
+
+![](resources/screencat/create_list.png)
+
+![](resources/screencat/create_class.png)
+
+![](resources/screencat/new_class.png)
+
+
+
+### 创建一个子对象
+
+选择某个对象的h文件，右键点击，选择OOC：Create Subclass  
+
+![](resources/screencat/create_sub_list.png)
+
+![](resources/screencat/create_sub_class.png)
+
+![](resources/screencat/newsub_class.png)
+
+
+
+### 添加一个虚函数
+
+选择某个对象的h文件，右键点击，选择OOC：Add Virtural Method
+
+ 对话框中会列出父类的所有虚函数![](resources/screencat/add_virtual_method.png)
+
+
+
+### 重写虚函数
+
+选择某个对象的h文件，右键点击，选择OOC：Override Virtural Method
+
+ 对话框中会列出父类的所有可以重写的虚函数
+
+![](resources/screencat/override_virtual_method.png)
+
+
+
+### 侧边栏类关系树状图
+
+打开 “OOC Inheritance” 视图，展开即可看到树形继承结构。
+
+点击节点打开对应头文件。  
+
+![](resources/screencat/class_tree_view.png)
+
+
+
+### 类关系生成PUNML类图
+
 打开 “OOC Inheritance” 视图，展开即可看到树形继承结构。  
-- 点击节点打开对应头文件。  
-- 右键节点可快速添加虚函数或生成类图。
+
+- 点击OOC：Show Class Diagram
+
+  ![](resources/screencat/class_view_pmul.png)
 
 ### PlantUML 类图
 类图提供拖拽和 Ctrl+滚轮缩放，并包含保存按钮，可将当前 PlantUML 源码导出为 `.puml` 文件。

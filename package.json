@@ -1,0 +1,119 @@
+{
+  "name": "ooc-relation-plugin",
+  "displayName": "OOC Relation Plugin",
+  "version": "1.0.3",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "icon": "resources/ooc-icon.png",
+  "main": "./out/extension.js",
+  "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "ooc-inheritance-view",
+          "name": "OOC Inheritance",
+          "icon": "resources/vtable-has.svg",
+          "contextualTitle": "Inheritance"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "ooc.createClass",
+        "title": "OOC: Create Class"
+      },
+      {
+        "command": "ooc.createInterface",
+        "title": "OOC: Create Interface"
+      },
+      {
+        "command": "ooc.createSubclass",
+        "title": "OOC: Create Subclass"
+      },
+      {
+        "command": "ooc.addVirtualMethod",
+        "title": "OOC: Add Virtual Method"
+      },
+      {
+        "command": "ooc.overrideMethods",
+        "title": "OOC: Override Virtual Methods"
+      },
+      {
+        "command": "ooc.addRegularMethod",
+        "title": "OOC: Add Regular Method"
+      },
+      {
+        "command": "ooc.addMembers",
+        "title": "OOC: Add Member Variables"
+      },
+      {
+        "command": "ooc.showClassDiagram",
+        "title": "OOC: Show Class Diagram"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "ooc.createClass",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ooc.createInterface",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ooc.createSubclass",
+          "when": "resourceFilename =~ /\\.h$/",
+          "group": "navigation@3"
+        },
+        {
+          "command": "ooc.addVirtualMethod",
+          "when": "resourceExtname == .h",
+          "group": "navigation@4"
+        },
+        {
+          "command": "ooc.overrideMethods",
+          "when": "resourceFilename =~ /\\.h$/",
+          "group": "navigation@5"
+        },
+        {
+          "command": "ooc.addRegularMethod",
+          "when": "resourceFilename =~ /\\.h$/",
+          "group": "navigation@6"
+        },
+        {
+          "command": "ooc.addMembers",
+          "when": "resourceFilename =~ /\\.h$/",
+          "group": "navigation@7"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "ooc.showClassDiagram",
+          "when": "view == ooc-inheritance-view",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^10.17.60",
+    "@types/plantuml-encoder": "^1.4.2",
+    "@types/vscode": "^1.70.0",
+    "typescript": "^4.9.0"
+  },
+  "dependencies": {
+    "plantuml-encoder": "^1.4.0"
+  }
+}

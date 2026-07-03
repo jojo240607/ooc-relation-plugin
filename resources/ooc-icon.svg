@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <!-- 霓虹发光滤镜 -->
+    <filter id="neon-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur1" />
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur2" />
+      <feMerge>
+        <feMergeNode in="blur2" />
+        <feMergeNode in="blur1" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- 铺满画布的渐变背景 -->
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3b1d5e" />
+      <stop offset="40%" stop-color="#1e122b" />
+      <stop offset="100%" stop-color="#0d0815" />
+    </linearGradient>
+
+    <!-- 网格纹理 -->
+    <pattern id="mesh" x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
+      <circle cx="5" cy="5" r="1.2" fill="#ffffff" opacity="0.08" />
+    </pattern>
+  </defs>
+
+  <!-- 1. 铺满画布的圆角背景 (四周无留白，圆角 60px 显得更加饱满) -->
+  <rect x="0" y="0" width="400" height="400" rx="60" fill="url(#bg-gradient)" />
+  
+  <!-- 2. 叠加网格纹理 -->
+  <rect x="0" y="0" width="400" height="400" rx="60" fill="url(#mesh)" />
+
+  <!-- 3. 图标主体 (使用数学居中放大) 
+       transform解析：
+       1. 先整体向上移动 44px 居中
+       2. 将圆心移到 (200,200)
+       3. 放大 1.3 倍
+       4. 移回原点
+       另外为了抵消放大带来的过粗，将线条从 8px 调整为 6px，放大后正好是 7.8px，完美还原原图精细度。
+  -->
+  <g stroke="#00e5ff" fill="none" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" filter="url(#neon-glow)" transform="translate(200, 200) scale(1.3) translate(-200, -200) translate(0, -44)">
+    
+    <!-- 左右代码符号 < > -->
+    <path d="M 145 145 L 110 180 L 145 215" />
+    <path d="M 255 145 L 290 180 L 255 215" />
+
+    <!-- 中心字母 C -->
+    <path d="M 225 160 A 35 35 0 1 0 225 200" />
+
+    <!-- 下方的树状分支/版本控制分支结构 -->
+    <path d="M 200 215 L 200 280" />
+    <path d="M 200 280 L 145 280 L 145 320" />
+    <path d="M 200 280 L 255 280 L 255 320" />
+
+    <!-- 底部三个节点圆圈 -->
+    <circle cx="145" cy="320" r="22" />
+    <circle cx="200" cy="320" r="22" />
+    <circle cx="255" cy="320" r="22" />
+  </g>
+</svg>

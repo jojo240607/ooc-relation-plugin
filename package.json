@@ -3,10 +3,11 @@
   "displayName": "OOC Relation Plugin",
   "version": "1.0.4",
   "engines": {
-    "vscode": "^1.70.0"
+    "vscode": "^1.86.0"
   },
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onChatParticipant:ooc-ai-agent"
   ],
   "icon": "resources/ooc-icon.png",
   "main": "./out/extension.js",
@@ -15,6 +16,25 @@
     "url": "https://github.com/jojo240607/ooc-relation-plugin.git"
   },
   "contributes": {
+    "configuration": {
+        "title": "OOC Relation Plugin",
+        "properties": {
+            "ooc-relation.apiKey": {
+                "type": "string",
+                "default": "",
+                "description": "DeepSeek API Key for AI features"
+            }
+        }
+    },
+    "chatParticipants": [
+        {
+            "id": "ooc-ai-agent",
+            "name": "ooc-ai-agent",
+            "description": "Generate OOC classes using natural language",
+            "isSticky": false,
+            "commands": []
+        }
+    ],
     "views": {
       "explorer": [
         {

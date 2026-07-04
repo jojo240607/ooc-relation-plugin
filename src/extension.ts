@@ -11,6 +11,7 @@ import { addMembers } from './commands/addMembers';
 import { showClassDiagram } from './commands/showClassDiagram';
 import { InheritanceNode } from './inheritanceTreeProvider';
 import * as quickCommands from './commands/quickCommands';
+import { activateChatParticipant } from './chatParticipant';
 
 
 export function activate(context: vscode.ExtensionContext) {
@@ -109,6 +110,10 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push({
         dispose: () => syncService.dispose()
     });
+    console.log('Before activateChatParticipant');
+        // 启动 AI Chat Participant
+    activateChatParticipant(context);
+    console.log('After activateChatParticipant');
 }
 
 export function deactivate() {}

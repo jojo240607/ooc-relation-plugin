@@ -1,7 +1,7 @@
 {
   "name": "ooc-relation-plugin",
   "displayName": "OOC Relation Plugin",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "engines": {
     "vscode": "^1.70.0"
   },
@@ -10,6 +10,10 @@
   ],
   "icon": "resources/ooc-icon.png",
   "main": "./out/extension.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jojo240607/ooc-relation-plugin.git"
+  },
   "contributes": {
     "views": {
       "explorer": [

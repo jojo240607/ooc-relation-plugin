@@ -1,6 +1,6 @@
 # OOC Relation Plugin
 
-![](resources/ooc-icon.svg)
+![](resources/ooc-icon.png)
 
 
 

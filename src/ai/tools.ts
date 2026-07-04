@@ -147,5 +147,21 @@ export const OOC_TOOLS = [
                 required: ['className', 'headerPath', 'methods']
             }
         }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'write_source_code',
+            description: 'Write generated code to the source file (.c) of a class.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    headerPath: { type: 'string', description: 'Absolute path to the header file (.h)' },
+                    code: { type: 'string', description: 'The C code to write' },
+                    mode: { type: 'string', enum: ['replace', 'append'], description: 'Write mode, defaults to append' }
+                },
+                required: ['headerPath', 'code']
+            }
+        }
     }
 ];

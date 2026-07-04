@@ -103,6 +103,9 @@ export function activate(context: vscode.ExtensionContext) {
         }),
         vscode.commands.registerCommand('ooc.quickAddRegularMethods', async (className: string, headerUri: vscode.Uri, methods: any[]) => {
             return await quickCommands.quickAddRegularMethods(className, headerUri, methods);
+        }),
+        vscode.commands.registerCommand('ooc.quickWriteCode', async (className: string, headerUri: vscode.Uri, methods: any[]) => {
+            return await quickCommands.quickWriteCode(headerUri, methods.map((m: any) => m.content).join('\n'));
         })
     );
 

@@ -50,8 +50,8 @@ export async function overrideMethods(context: vscode.ExtensionContext, headerUr
 
     const childDoc = await vscode.workspace.openTextDocument(headerUri);
     const childStruct = ast.findStruct(childDoc, childName);
-    if (!childStruct || !ast.hasVtableField(childStruct)) {
-        vscode.window.showErrorMessage(`Class ${childName} does not have a virtual table.`);
+    if (!childStruct) {//|| !ast.hasVtableField(childStruct)
+        vscode.window.showErrorMessage(`Class ${childName} does not be found`);
         return;
     }
 

@@ -70,7 +70,7 @@ export async function addVirtualMethod(context: vscode.ExtensionContext, headerU
 }
 
 // ========== 动态添加虚表 ==========
-async function addVtableToClass(
+export async function addVtableToClass(
     headerUri: vscode.Uri,
     sourceUri: vscode.Uri,
     className: string

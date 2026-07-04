@@ -8,14 +8,12 @@ export interface FunctionCall {
 }
 
 export async function callDeepSeekForFunctionCalls(
-    userPrompt: string,
-    systemPrompt: string,
-    tools: any[]
+    messages: { role: string; content: string; tool_calls?: any[]; tool_call_id?: string }[],
+    tools: any[],
+    requireTool: boolean = false
 ): Promise<FunctionCall[]> {
     const apiKey = await getApiKey();
-    if (!apiKey) {
-        throw new Error('DeepSeek API key not configured. Please set ooc-relation.apiKey in settings.');
-    }
+    if (!apiKey) throw new Error('API key not configured.');
 
     const response = await fetch(DEEPSEEK_API_URL, {
         method: 'POST',
@@ -25,14 +23,10 @@ export async function callDeepSeekForFunctionCalls(
         },
         body: JSON.stringify({
             model: 'deepseek-chat',
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userPrompt }
-            ],
+            messages: messages,
             tools: tools,
-            tool_choice: 'auto',
-            max_tokens: 2048,          // 增加输出长度
-            temperature: 0.1           // 降低随机性，使输出更确定
+            tool_choice: requireTool ? 'required' : 'auto',
+            max_tokens: 4096
         })
     });
 
@@ -43,9 +37,7 @@ export async function callDeepSeekForFunctionCalls(
 
     const data = await response.json();
     const message = data.choices?.[0]?.message;
-    if (!message) {
-        return [];
-    }
+    if (!message) return [];
     if (message.tool_calls) {
         return message.tool_calls.map((tc: any) => ({
             name: tc.function.name,
@@ -56,8 +48,5 @@ export async function callDeepSeekForFunctionCalls(
 }
 
 async function getApiKey(): Promise<string | undefined> {
-    // 首先从 SecretStorage 读取
-    const secrets = (vscode.authentication as any)?.getSession; // 如果使用 VS Code Secrets，更安全
-    // 简单起见，直接从配置读取（可后续改为 SecretStorage）
     return vscode.workspace.getConfiguration('ooc-relation').get<string>('apiKey');
 }

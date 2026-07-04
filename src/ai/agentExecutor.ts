@@ -1,12 +1,11 @@
 import * as vscode from 'vscode';
-import { relationStore } from '../sync/ClassRelationStore'; // 根据实际路径调整
+import { relationStore } from '../sync/ClassRelationStore';
 import { FunctionCall } from './deepseekClient';
 
-/**
- * 执行一系列 Function Call，每个调用独立执行，不因单个失败而中断
- * @param calls AI 返回的工具调用列表
- * @returns 每个调用的执行结果字符串数组
- */
+function isAlreadyExists(msg: string): boolean {
+    return msg.includes('already exists');
+}
+
 export async function executeFunctionCalls(calls: FunctionCall[]): Promise<string[]> {
     const results: string[] = [];
 
@@ -20,26 +19,31 @@ export async function executeFunctionCalls(calls: FunctionCall[]): Promise<strin
                     const folderUri = vscode.Uri.file(call.arguments.folderUri);
                     result = await vscode.commands.executeCommand('ooc.quickCreateClass',
                         call.arguments.className, folderUri);
+                    if (result && !result.success && isAlreadyExists(result.message)) {
+                        result = { success: true, message: 'Class already exists, skipped' };
+                    }
                     break;
                 }
-
                 case 'create_interface': {
                     const folderUri = vscode.Uri.file(call.arguments.folderUri);
                     result = await vscode.commands.executeCommand('ooc.quickCreateInterface',
                         call.arguments.interfaceName, folderUri, call.arguments.methods || []);
+                    if (result && !result.success && isAlreadyExists(result.message)) {
+                        result = { success: true, message: 'Interface already exists, skipped' };
+                    }
                     break;
                 }
-
                 case 'create_subclass': {
                     const parentHeaderPath = call.arguments.parentHeaderPath;
                     const parentUri = vscode.Uri.file(parentHeaderPath);
                     result = await vscode.commands.executeCommand('ooc.quickCreateSubclass',
                         call.arguments.parentName, parentUri, call.arguments.subclassName);
+                    if (result && !result.success && isAlreadyExists(result.message)) {
+                        result = { success: true, message: 'Subclass already exists, skipped' };
+                    }
                     break;
                 }
-
                 case 'add_virtual_methods': {
-                    // 自动补全 headerPath
                     let headerPath = call.arguments.headerPath;
                     if (!headerPath) {
                         headerPath = resolveHeaderPath(call.arguments.className);
@@ -49,19 +53,20 @@ export async function executeFunctionCalls(calls: FunctionCall[]): Promise<strin
                         call.arguments.className, headerUri, call.arguments.methods);
                     break;
                 }
-
                 case 'override_method': {
                     let headerPath = call.arguments.headerPath;
                     if (!headerPath) {
                         headerPath = resolveHeaderPath(call.arguments.className);
                     }
                     const headerUri = vscode.Uri.file(headerPath);
+                    // 始终自动计算 vtablePath，忽略 AI 传入的值
+                    const depth = computeDepth(call.arguments.className, call.arguments.fromClass);
+                    const vtablePath = depth > 0 ? Array(depth).fill('parent').join('.') + '.vtable' : 'vtable';
                     result = await vscode.commands.executeCommand('ooc.quickOverrideMethod',
                         call.arguments.className, headerUri, call.arguments.fromClass,
-                        call.arguments.method, call.arguments.vtablePath);
+                        call.arguments.method, vtablePath);
                     break;
                 }
-
                 case 'add_members': {
                     let headerPath = call.arguments.headerPath;
                     if (!headerPath) {
@@ -72,7 +77,6 @@ export async function executeFunctionCalls(calls: FunctionCall[]): Promise<strin
                         call.arguments.className, headerUri, call.arguments.members);
                     break;
                 }
-
                 case 'add_regular_methods': {
                     let headerPath = call.arguments.headerPath;
                     if (!headerPath) {
@@ -83,7 +87,6 @@ export async function executeFunctionCalls(calls: FunctionCall[]): Promise<strin
                         call.arguments.className, headerUri, call.arguments.methods);
                     break;
                 }
-
                 default:
                     result = { success: false, message: `Unknown tool: ${call.name}` };
             }
@@ -102,10 +105,6 @@ export async function executeFunctionCalls(calls: FunctionCall[]): Promise<strin
     return results;
 }
 
-/**
- * 根据类名解析头文件的绝对路径
- * 优先从关系缓存中查找，其次假设在工作区根目录
- */
 function resolveHeaderPath(className: string): string {
     const entry = relationStore.getClass(className);
     if (entry && vscode.workspace.workspaceFolders?.[0]) {
@@ -114,5 +113,24 @@ function resolveHeaderPath(className: string): string {
     if (vscode.workspace.workspaceFolders?.[0]) {
         return vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, `${className}.h`).fsPath;
     }
-    return `${className}.h`; // fallback
+    return `${className}.h`;
+}
+
+/**
+ * 计算从 childName 到 ancestorName 需要经过多少个 parent 层级
+ */
+function computeDepth(childName: string, ancestorName: string): number {
+    let depth = 0;
+    let current = childName;
+    const visited = new Set<string>();
+    while (current !== ancestorName) {
+        if (visited.has(current)) return -1;
+        visited.add(current);
+        const entry = relationStore.getClass(current);
+        if (!entry || !entry.parent) return -1;
+        current = entry.parent;
+        depth++;
+        if (depth > 20) return -1;
+    }
+    return depth;
 }

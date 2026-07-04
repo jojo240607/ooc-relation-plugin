@@ -87,6 +87,15 @@ export async function executeFunctionCalls(calls: FunctionCall[]): Promise<strin
                         call.arguments.className, headerUri, call.arguments.methods);
                     break;
                 }
+                case 'write_source_code': {
+                    const headerPath = call.arguments.headerPath;
+                    const code = call.arguments.code || '';
+                    const mode = call.arguments.mode || 'append';
+                    const headerUri = vscode.Uri.file(headerPath);
+                    result = await vscode.commands.executeCommand('ooc.quickWriteCode',
+                        headerUri, code, mode);
+                    break;
+                }
                 default:
                     result = { success: false, message: `Unknown tool: ${call.name}` };
             }

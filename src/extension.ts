@@ -10,6 +10,8 @@ import { overrideMethods } from './commands/overrideMethods';
 import { addMembers } from './commands/addMembers';
 import { showClassDiagram } from './commands/showClassDiagram';
 import { InheritanceNode } from './inheritanceTreeProvider';
+import * as quickCommands from './commands/quickCommands';
+
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('OOC Relation Plugin is now active!');
@@ -79,6 +81,27 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('ooc.showClassDiagram', (item?: InheritanceNode) => {
             const highlightClassName = item?.name;
             showClassDiagram(context, treeProvider, highlightClassName);
+        }),
+        vscode.commands.registerCommand('ooc.quickCreateClass', async (className: string, folderUri: vscode.Uri) => {
+            return await quickCommands.quickCreateClass(className, folderUri);
+        }),
+        vscode.commands.registerCommand('ooc.quickCreateInterface', async (interfaceName: string, folderUri: vscode.Uri, methods?: any[]) => {
+            return await quickCommands.quickCreateInterface(interfaceName, folderUri, methods || []);
+        }),
+        vscode.commands.registerCommand('ooc.quickCreateSubclass', async (parentName: string, parentUri: vscode.Uri, subclassName: string, targetFolderUri?: vscode.Uri) => {
+            return await quickCommands.quickCreateSubclass(parentName, parentUri, subclassName, targetFolderUri);
+        }),
+        vscode.commands.registerCommand('ooc.quickAddVirtualMethods', async (className: string, headerUri: vscode.Uri, methods: any[]) => {
+            return await quickCommands.quickAddVirtualMethods(className, headerUri, methods);
+        }),
+        vscode.commands.registerCommand('ooc.quickOverrideMethod', async (className: string, headerUri: vscode.Uri, fromClass: string, method: any, vtablePath: string) => {
+            return await quickCommands.quickOverrideMethod(className, headerUri, fromClass, method, vtablePath);
+        }),
+        vscode.commands.registerCommand('ooc.quickAddMembers', async (className: string, headerUri: vscode.Uri, members: any[]) => {
+            return await quickCommands.quickAddMembers(className, headerUri, members);
+        }),
+        vscode.commands.registerCommand('ooc.quickAddRegularMethods', async (className: string, headerUri: vscode.Uri, methods: any[]) => {
+            return await quickCommands.quickAddRegularMethods(className, headerUri, methods);
         })
     );
 

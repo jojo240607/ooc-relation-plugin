@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import * as ast from '../utils/astUtils';
+import { addRegularMethodsToClass } from '../operations/addRegularMethodOperation';
 
 interface RegularMethodEntry {
     returnType: string;
@@ -100,49 +100,25 @@ export class AddRegularMethodPanel {
                 }
             }
 
-            for (const m of methods) {
-                const selfParam = `${this._className} *self`;
-                const fullParams = m.params ? `${selfParam}, ${m.params}` : selfParam;
+            const result = await addRegularMethodsToClass(
+                this._className,
+                this._headerUri,
+                this._sourceUri,
+                methods
+            );
 
-                // 1. 头文件：向 Fun 结构体插入函数指针声明
-                const headerDoc = await vscode.workspace.openTextDocument(this._headerUri);
-                const funMemberDecl = `${m.returnType} (*${m.name})(${fullParams});`;
-                await ast.insertFunMember(headerDoc, this._className, funMemberDecl);
-
-                // 2. 源文件：static 实现函数
-                let sourceDoc = await vscode.workspace.openTextDocument(this._sourceUri);
-                const decl = `static ${m.returnType} ${this._className}_${m.name}(${fullParams});`;
-                if (!sourceDoc.getText().includes(decl)) {
-                    await ast.insertAfterIncludes(sourceDoc, decl);
-                }
-                sourceDoc = await vscode.workspace.openTextDocument(this._sourceUri);
-
-                const impl = `
-static ${m.returnType} ${this._className}_${m.name}(${fullParams}) {
-    /* TODO: Implement */
-    ${m.returnType === 'void' ? '' : `static ${m.returnType} ret = {0}; return ret;`}
-}
-`;
-                await ast.insertAtEndOfFile(sourceDoc, impl);
-
-                // 3. 源文件：在 _fun 初始化列表中添加成员
-                sourceDoc = await vscode.workspace.openTextDocument(this._sourceUri);
-                await ast.insertFunInit(sourceDoc, this._className, m.name, `${this._className}_${m.name}`);
+            if (!result.success) {
+                vscode.window.showErrorMessage(result.message);
+                return;
             }
 
-            // 保存文件
-            const finalHeaderDoc = await vscode.workspace.openTextDocument(this._headerUri);
-            await finalHeaderDoc.save();
-            const finalSourceDoc = await vscode.workspace.openTextDocument(this._sourceUri);
-            await finalSourceDoc.save();
-
-            // 新增：回调通知外部同步缓存
+            // 回调通知外部
             if (this._onModified) {
                 const relativePath = vscode.workspace.asRelativePath(this._headerUri);
                 this._onModified(this._className, relativePath);
             }
 
-            vscode.window.showInformationMessage(`Successfully added ${methods.length} regular method(s) to ${this._className}.`);
+            vscode.window.showInformationMessage(result.message);
             this._panel.dispose();
         } catch (err) {
             vscode.window.showErrorMessage(`Failed to add methods: ${err}`);

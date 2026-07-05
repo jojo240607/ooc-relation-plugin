@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import * as ast from '../utils/astUtils';
 import { AncestorMethod } from '../commands/overrideMethods';
+import { overrideMethodsInSource } from '../operations/overrideMethodsOperation';
 
 export class OverrideMethodPanel {
     public static currentPanel: OverrideMethodPanel | undefined;
@@ -12,8 +12,7 @@ export class OverrideMethodPanel {
     private readonly _headerUri: vscode.Uri;
     private readonly _sourceUri: vscode.Uri;
     private readonly _methods: AncestorMethod[];
-    private readonly _alreadyOverridden: Set<string>;  // "methodName::parentClass"
-    // 新增：覆盖成功后的回调
+    private readonly _alreadyOverridden: Set<string>;
     private readonly _onModified?: (className: string, relativePath: string) => void;
 
     public static createOrShow(
@@ -92,58 +91,37 @@ export class OverrideMethodPanel {
 
     private async _handleOverride(selected: string[]) {
         try {
-            for (const key of selected) {
-                const [methodName, fromClass] = key.split('::');
-                const vfunc = this._methods.find(m => m.name === methodName && m.fromClass === fromClass);
-                if (!vfunc) continue;
+            // 筛选出选中的且未重写的方法
+            const methodsToOverride = this._methods.filter(m => {
+                const key = `${m.name}::${m.fromClass}`;
+                return selected.includes(key) && !this._alreadyOverridden.has(key);
+            });
 
-                const extraParams = this.removeSelfParam(vfunc.params, vfunc.fromClass);
-                const fullParams = extraParams
-                    ? `${vfunc.fromClass} *self, ${extraParams}`
-                    : `${vfunc.fromClass} *self`;
-
-                const overrideFuncName = `override_${this._childName}_${vfunc.fromClass}_${vfunc.name}_impl`;
-                let sourceDoc = await vscode.workspace.openTextDocument(this._sourceUri);
-
-                // 1. 前向声明
-                const decl = `static ${vfunc.returnType} ${overrideFuncName}(${fullParams});`;
-                if (!sourceDoc.getText().includes(decl)) {
-                    await ast.insertAfterIncludes(sourceDoc, decl);
-                }
-
-                // 2. 虚表赋值
-                const assign = `self->${vfunc.vtablePath}->${vfunc.name} = ${overrideFuncName};`;
-                sourceDoc = await vscode.workspace.openTextDocument(this._sourceUri);
-                await ast.insertBeforeFunctionEnd(sourceDoc, `${this._childName}_init`, assign);
-
-                // 3. 覆写实现
-                const ret = vfunc.returnType === 'void'
-                    ? ''
-                    : `static ${vfunc.returnType} ret = {0}; return ret;`;
-                const impl = `
-static ${vfunc.returnType} ${overrideFuncName}(${fullParams}) {
-    ${this._childName} *child = (${this._childName}*)self;
-    /* TODO: Override implementation */
-    (void)child;
-    ${ret}
-}
-`;
-                sourceDoc = await vscode.workspace.openTextDocument(this._sourceUri);
-                await ast.insertAtEndOfFile(sourceDoc, impl);
+            if (methodsToOverride.length === 0) {
+                vscode.window.showWarningMessage('No new methods to override.');
+                return;
             }
-            // 保存文件
-            const finalHeaderDoc = await vscode.workspace.openTextDocument(this._headerUri);
-            await finalHeaderDoc.save();
-            const finalSourceDoc = await vscode.workspace.openTextDocument(this._sourceUri);
-            await finalSourceDoc.save();
 
-            // 新增：回调通知外部（更新关系表）
+            const result = await overrideMethodsInSource(
+                this._childName,
+                this._headerUri,
+                this._sourceUri,
+                methodsToOverride
+            );
+
+            if (!result.success) {
+                vscode.window.showErrorMessage(result.message);
+                return;
+            }
+
+            vscode.window.showInformationMessage(result.message);
+
+            // 回调通知外部
             if (this._onModified) {
                 const relativePath = vscode.workspace.asRelativePath(this._headerUri);
                 this._onModified(this._childName, relativePath);
             }
 
-            vscode.window.showInformationMessage(`Overridden ${selected.length} method(s) in ${this._childName}.`);
             this._panel.dispose();
         } catch (err) {
             vscode.window.showErrorMessage(`Failed to override: ${err}`);

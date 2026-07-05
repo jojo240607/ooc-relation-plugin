@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
-import { generateInterfaceHeader } from '../templates/interfaceHeader';
-import { generateInterfaceSource } from '../templates/interfaceSource';
+import { createInterfaceFiles } from '../operations/createInterfaceOperation';
 
 export class CreateInterfacePanel {
     public static currentPanel: CreateInterfacePanel | undefined;
@@ -94,30 +93,30 @@ export class CreateInterfacePanel {
             const targetDir = vscode.Uri.file(targetDirStr);
             try { await vscode.workspace.fs.createDirectory(targetDir); } catch {}
 
-            const headerContent = generateInterfaceHeader(interfaceName, methods);
-            const sourceContent = generateInterfaceSource(interfaceName, methods);
-
-            const headerUri = vscode.Uri.joinPath(targetDir, `${interfaceName}.h`);
-            const sourceUri = vscode.Uri.joinPath(targetDir, `${interfaceName}.c`);
-
-            if ((await exists(headerUri)) || (await exists(sourceUri))) {
+            // 先尝试非强制创建
+            let result = await createInterfaceFiles(interfaceName, targetDir, methods, false);
+            // 如果文件已存在，询问用户是否覆盖
+            if (!result.success && result.message.includes('already exists')) {
                 const ans = await vscode.window.showWarningMessage(
-                    `Files for interface "${interfaceName}" already exist. Overwrite?`, { modal: true }, 'Yes'
+                    `Files for interface "${interfaceName}" already exist. Overwrite?`,
+                    { modal: true },
+                    'Yes'
                 );
-                if (ans !== 'Yes') return;
+                if (ans === 'Yes') {
+                    result = await createInterfaceFiles(interfaceName, targetDir, methods, true);
+                }
             }
 
-            await vscode.workspace.fs.writeFile(headerUri, Buffer.from(headerContent));
-            await vscode.workspace.fs.writeFile(sourceUri, Buffer.from(sourceContent));
+            if (!result.success) {
+                vscode.window.showErrorMessage(result.message);
+                return;
+            }
 
-            const doc = await vscode.workspace.openTextDocument(headerUri);
-            await vscode.window.showTextDocument(doc);
             vscode.window.showInformationMessage(`OOC Interface "${interfaceName}" created.`);
 
-            // ===== 新增：回调通知外部同步缓存 =====
-            const relativePath = vscode.workspace.asRelativePath(headerUri);
-            // 接口作为基类，parent = null，初始 hasVtable 根据是否有方法决定，但一般接口需要虚表，可以设为 false 待后续添加虚表时更新
-            const hasVtable = methods.length > 0; // 如果有定义方法，可能就需要虚表，但暂时保持灵活
+            // 回调通知外部（如果有）
+            const relativePath = vscode.workspace.asRelativePath(vscode.Uri.joinPath(targetDir, `${interfaceName}.h`));
+            const hasVtable = methods.length > 0;
             this._onInterfaceCreated?.(interfaceName, relativePath, null, hasVtable);
 
             this._panel.dispose();

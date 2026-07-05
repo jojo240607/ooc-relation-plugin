@@ -81,6 +81,13 @@ export function activateChatParticipant(context: vscode.ExtensionContext) {
 - 即使某些步骤可能已经完成（例如类已存在），你仍然需要生成对应的调用（这些调用会被自动跳过而不会出错）。
 - 请参考下面的完整示例。
 
+## 关键参数格式
+- 'params' 字段只能包含**额外**参数（不包含类 self 指针）。系统会自动添加正确的 self 指针。
+- 如果方法没有额外参数，请使用 "params": ""（空字符串）。
+- 如果方法有额外参数，例如 int baudrate，请使用 "params": "int baudrate"。
+- **绝对不要** 使用 "void" 作为无参数占位符。错误示例："params": "void"。正确示例："params": ""。
+- 对于重写方法，'params' 字段遵循与原始虚方法相同的规则。
+
 ## 完整示例（包含所有常见操作）
 用户请求："创建一个基类 Animal，包含虚函数 speak 和 eat。然后创建一个接口 IAnimal，包含虚函数 move。再创建 Animal 的子类 Dog，重写 speak 方法，添加一个常规方法 run（无额外参数），并为 Dog 添加成员变量 age 和 name。"
 
@@ -92,6 +99,38 @@ export function activateChatParticipant(context: vscode.ExtensionContext) {
 5. override_method Dog 重写 speak
 6. add_regular_methods Dog (run)
 7. add_members Dog (age, name)
+
+## 示例：重写并实现虚函数
+用户请求："创建一个基类 Serial，包含虚函数 open。然后创建一个子类 UartSerial，重写 open 并实现具体代码：初始化 UART 硬件。"
+
+你的计划应包含：
+1. create_base_class Serial
+2. add_virtual_methods Serial (open)
+3. create_subclass UartSerial
+4. override_method UartSerial open
+5. modify_function_body 目标函数 "override_UartSerial_Serial_open_impl"，mode "replace"，并提供完整的初始化代码。
+
+## 强制完整性规则（关于重写实现）
+- 当用户请求“重写并实现具体代码”或类似要求时，你必须为**每一个**被重写的虚方法调用 modify_function_body 并填写实现代码。
+- 即使某个方法（如 close）没有额外参数，你也必须生成实现，例如：
+  UartSerial *uart = (UartSerial*)self;
+  uart->is_open = 0;
+  return 0;
+- 在生成最终计划之前，请**自我检查**：数一下原请求中要求重写的方法个数，再数一下你的计划中包含了多少个 modify_function_body 调用，确保两者数量一致。如果不一致，补充缺失的实现。
+
+## 完整示例：重写多个虚函数并全部实现
+用户请求："创建子类 UartSerial 继承 Serial，重写 open、read、write、close 并实现具体代码。"
+你的计划（顺序可能调整）必须包含：
+1. override_method UartSerial open
+2. modify_function_body "override_UartSerial_Serial_open_impl" (提供打开实现的代码)
+3. override_method UartSerial read
+4. modify_function_body "override_UartSerial_Serial_read_impl" (提供读取实现的代码)
+5. override_method UartSerial write
+6. modify_function_body "override_UartSerial_Serial_write_impl" (提供写入实现的代码)
+7. override_method UartSerial close
+8. modify_function_body "override_UartSerial_Serial_close_impl" (提供关闭实现的代码)
+注意：不能漏掉任何一个 modify_function_body！
+
 
 请严格遵守此完整性要求。
 当前上下文：${contextInfo}`;

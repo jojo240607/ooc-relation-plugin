@@ -69,6 +69,9 @@ Available tools:
 - Always check the results of previous steps before proceeding.
 - Do not add duplicate functions.
 - For private functions, \`add_private_function\` handles the forward declaration automatically.
+- Before calling modify_function_body with mode "replace", ALWAYS read the source file first to confirm the exact function name and signature exist.
+- If you are unsure about the function name, use add_private_function to create it instead.
+- Never attempt to replace a function body if you haven't verified its existence in the file.
 
 Current context: ${contextInfo}`;
 

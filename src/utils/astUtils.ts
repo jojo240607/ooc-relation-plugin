@@ -565,26 +565,65 @@ export function getFunMethods(document: vscode.TextDocument, className: string):
  * @param functionName 函数名
  * @param newBody 新函数体代码（不含大括号）
  */
+
+/**
+ * 替换指定函数的函数体（仅匹配函数定义，不匹配结构体成员）
+ */
 export async function replaceFunctionBody(
     document: vscode.TextDocument,
     functionName: string,
     newBody: string
 ): Promise<boolean> {
-    const func = findFunction(document, functionName);
-    if (!func) return false;
-    const we = new vscode.WorkspaceEdit();
-    const range = new vscode.Range(
-        new vscode.Position(func.bodyStart, 0),
-        new vscode.Position(func.bodyEnd, document.lineAt(func.bodyEnd).text.length)
-    );
-    // 保留原有缩进（使用函数体第一行的缩进）
-    const firstLine = document.lineAt(func.bodyStart).text;
-    const indent = firstLine.match(/^(\s*)/)?.[0] ?? '';
-    const indentedBody = newBody.split('\n').map(line => `${indent}    ${line}`).join('\n');
-    we.replace(document.uri, range, `{\n${indentedBody}\n${indent}}`);
-    await vscode.workspace.applyEdit(we);
-    await document.save();
-    return true;
+    // 关键修复：去除可能的多余空格
+    const cleanName = functionName.trim();
+    const text = document.getText();
+    const escapedName = cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // 匹配函数定义：前面是返回类型（或 static），后面是 (
+    const funcRegex = new RegExp(`(?:static\\s+)?[\\w*]+\\s+${escapedName}\\s*\\(`, 'g');
+    let match;
+    while ((match = funcRegex.exec(text)) !== null) {
+        const startIdx = match.index;
+        // 找到 {
+        let lookIdx = startIdx + match[0].length;
+        while (lookIdx < text.length && /\s/.test(text[lookIdx])) lookIdx++;
+        if (text[lookIdx] !== '{') continue;
+
+        const openBracePos = lookIdx;
+        const openBraceLine = document.positionAt(openBracePos).line;
+
+        // 匹配 } 
+        let braceCount = 1;
+        let closeBracePos = openBracePos + 1;
+        while (closeBracePos < text.length && braceCount > 0) {
+            if (text[closeBracePos] === '{') braceCount++;
+            else if (text[closeBracePos] === '}') braceCount--;
+            if (braceCount > 0) closeBracePos++;
+        }
+        if (braceCount !== 0) continue;
+        const closeBraceLine = document.positionAt(closeBracePos).line;
+
+        const openLineText = document.lineAt(openBraceLine).text;
+        const baseIndent = openLineText.match(/^(\s*)/)?.[0] ?? '';
+        const bodyIndent = baseIndent + '    ';
+        const indentedBody = newBody.split('\n').map(line => `${bodyIndent}${line}`).join('\n');
+
+        const we = new vscode.WorkspaceEdit();
+        if (openBraceLine === closeBraceLine) {
+            const insertPos = new vscode.Position(openBraceLine, openLineText.length);
+            we.insert(document.uri, insertPos, `\n${indentedBody}`);
+        } else {
+            const range = new vscode.Range(
+                new vscode.Position(openBraceLine + 1, 0),
+                new vscode.Position(closeBraceLine, 0)
+            );
+            we.replace(document.uri, range, indentedBody + '\n');
+        }
+
+        await vscode.workspace.applyEdit(we);
+        await document.save();
+        return true;
+    }
+    return false;
 }
 
 /**

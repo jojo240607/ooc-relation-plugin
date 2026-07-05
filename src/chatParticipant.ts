@@ -41,7 +41,7 @@ export function activateChatParticipant(context: vscode.ExtensionContext) {
         const contextInfo = `Workspace root: ${workspaceRoot}\nExisting classes:\n${existingClassesInfo || 'none'}`;
 
         const systemPrompt = `你是一个 OOC（面向对象 C）代码生成助手。请逐步规划并执行用户的请求。每次响应必须返回一个 JSON 数组，其中包含一个或多个函数调用。执行后你会收到结果，然后可以决定下一步操作。当任务完全完成时，返回一个空数组 []。
-        
+
 可用工具：
 - create_base_class(className, folderUri) —— 创建基类
 - create_interface(interfaceName, folderUri, methods) —— 创建接口
@@ -74,6 +74,26 @@ export function activateChatParticipant(context: vscode.ExtensionContext) {
 - 绝不要在未验证函数存在于文件中的情况下尝试替换函数体。
 - 调用 modify_function_body 时，确保 functionName 参数前后没有多余的空格。
 
+## 强制性完整性规则
+- 对于用户的复合请求，你必须一次性返回**所有**必需的函数调用，不得遗漏任何步骤。
+- 当请求中包含“重写”或“override”时，你必须在计划中明确调用 override_method。
+- 当请求中包含“常规方法”或“add regular method”时，你必须在计划中调用 add_regular_methods。
+- 即使某些步骤可能已经完成（例如类已存在），你仍然需要生成对应的调用（这些调用会被自动跳过而不会出错）。
+- 请参考下面的完整示例。
+
+## 完整示例（包含所有常见操作）
+用户请求："创建一个基类 Animal，包含虚函数 speak 和 eat。然后创建一个接口 IAnimal，包含虚函数 move。再创建 Animal 的子类 Dog，重写 speak 方法，添加一个常规方法 run（无额外参数），并为 Dog 添加成员变量 age 和 name。"
+
+你的计划应该包含以下全部调用（顺序可能略有不同）：
+1. create_base_class Animal
+2. add_virtual_methods Animal (speak, eat)
+3. create_interface IAnimal (move)
+4. create_subclass Dog 继承 Animal
+5. override_method Dog 重写 speak
+6. add_regular_methods Dog (run)
+7. add_members Dog (age, name)
+
+请严格遵守此完整性要求。
 当前上下文：${contextInfo}`;
 
         const messages: any[] = [

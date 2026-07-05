@@ -569,61 +569,74 @@ export function getFunMethods(document: vscode.TextDocument, className: string):
 /**
  * 替换指定函数的函数体（仅匹配函数定义，不匹配结构体成员）
  */
+/**
+ * 替换指定函数的函数体（仅匹配函数定义，不匹配声明）
+ * 使用正则直接匹配到左大括号 {
+ */
 export async function replaceFunctionBody(
     document: vscode.TextDocument,
     functionName: string,
     newBody: string
 ): Promise<boolean> {
-    // 关键修复：去除可能的多余空格
     const cleanName = functionName.trim();
     const text = document.getText();
     const escapedName = cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // 匹配函数定义：前面是返回类型（或 static），后面是 (
-    const funcRegex = new RegExp(`(?:static\\s+)?[\\w*]+\\s+${escapedName}\\s*\\(`, 'g');
-    let match;
-    while ((match = funcRegex.exec(text)) !== null) {
-        const startIdx = match.index;
-        // 找到 {
-        let lookIdx = startIdx + match[0].length;
-        while (lookIdx < text.length && /\s/.test(text[lookIdx])) lookIdx++;
-        if (text[lookIdx] !== '{') continue;
 
-        const openBracePos = lookIdx;
-        const openBraceLine = document.positionAt(openBracePos).line;
+    // 匹配函数定义：可选的 static，返回类型（可能多个单词），函数名，参数列表（不含嵌套括号），左大括号
+    const regex = new RegExp(
+        `(?:static\\s+)?(?:[\\w*]+\\s+)*${escapedName}\\s*\\([^)]*\\)\\s*\\{`,
+        'g'
+    );
 
-        // 匹配 } 
-        let braceCount = 1;
-        let closeBracePos = openBracePos + 1;
-        while (closeBracePos < text.length && braceCount > 0) {
-            if (text[closeBracePos] === '{') braceCount++;
-            else if (text[closeBracePos] === '}') braceCount--;
-            if (braceCount > 0) closeBracePos++;
-        }
-        if (braceCount !== 0) continue;
-        const closeBraceLine = document.positionAt(closeBracePos).line;
-
-        const openLineText = document.lineAt(openBraceLine).text;
-        const baseIndent = openLineText.match(/^(\s*)/)?.[0] ?? '';
-        const bodyIndent = baseIndent + '    ';
-        const indentedBody = newBody.split('\n').map(line => `${bodyIndent}${line}`).join('\n');
-
-        const we = new vscode.WorkspaceEdit();
-        if (openBraceLine === closeBraceLine) {
-            const insertPos = new vscode.Position(openBraceLine, openLineText.length);
-            we.insert(document.uri, insertPos, `\n${indentedBody}`);
-        } else {
-            const range = new vscode.Range(
-                new vscode.Position(openBraceLine + 1, 0),
-                new vscode.Position(closeBraceLine, 0)
-            );
-            we.replace(document.uri, range, indentedBody + '\n');
-        }
-
-        await vscode.workspace.applyEdit(we);
-        await document.save();
-        return true;
+    const match = regex.exec(text);
+    if (!match) {
+        console.log(`[replaceFunctionBody] No definition found for "${cleanName}"`);
+        return false;
     }
-    return false;
+
+    const fullMatch = match[0];
+    // 找到左大括号的位置（在匹配字符串中最后一个字符是 {）
+    const bracePos = match.index + fullMatch.length - 1; // 由于正则以 \{ 结尾，-1 得到 { 的索引
+    const openBraceLine = document.positionAt(bracePos).line;
+
+    // 查找匹配的右大括号 }
+    let closeBracePos = bracePos + 1;
+    let braceCount = 1;
+    while (closeBracePos < text.length && braceCount > 0) {
+        if (text[closeBracePos] === '{') braceCount++;
+        else if (text[closeBracePos] === '}') braceCount--;
+        if (braceCount > 0) closeBracePos++;
+    }
+    if (braceCount !== 0) {
+        console.log(`[replaceFunctionBody] Unmatched braces for "${cleanName}"`);
+        return false;
+    }
+    const closeBraceLine = document.positionAt(closeBracePos).line;
+
+    // 获取缩进
+    const openLineText = document.lineAt(openBraceLine).text;
+    const baseIndent = openLineText.match(/^(\s*)/)?.[0] ?? '';
+    const bodyIndent = baseIndent + '    ';
+    const indentedBody = newBody.split('\n').map(line => `${bodyIndent}${line}`).join('\n');
+
+    const we = new vscode.WorkspaceEdit();
+    if (openBraceLine === closeBraceLine) {
+        // 空函数体，直接在 { 后插入
+        const insertPos = new vscode.Position(openBraceLine, openLineText.length);
+        we.insert(document.uri, insertPos, `\n${indentedBody}`);
+    } else {
+        // 替换 { } 之间的内容（不含大括号所在行）
+        const range = new vscode.Range(
+            new vscode.Position(openBraceLine + 1, 0),
+            new vscode.Position(closeBraceLine, 0)
+        );
+        we.replace(document.uri, range, indentedBody + '\n');
+    }
+
+    await vscode.workspace.applyEdit(we);
+    await document.save();
+    console.log(`[replaceFunctionBody] Successfully replaced body of "${cleanName}"`);
+    return true;
 }
 
 /**

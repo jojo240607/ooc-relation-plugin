@@ -77,19 +77,20 @@ export async function modifyFunctionBody(
     codeContent: string,
     mode: 'replace' | 'append' = 'append'
 ): Promise<{ success: boolean; message: string }> {
+    const cleanName = functionName.trim();
     try {
         const sourceUri = vscode.Uri.joinPath(headerUri, '..', `${headerUri.path.split('/').pop()?.replace('.h', '')}.c`);
         const doc = await vscode.workspace.openTextDocument(sourceUri);
         let ok = false;
         if (mode === 'replace') {
-            ok = await ast.replaceFunctionBody(doc, functionName, codeContent);
+            ok = await ast.replaceFunctionBody(doc, cleanName, codeContent);
         } else {
-            ok = await ast.appendToFunctionBody(doc, functionName, codeContent);
+            ok = await ast.appendToFunctionBody(doc, cleanName, codeContent);
         }
         if (!ok) {
-            return { success: false, message: `Function ${functionName} not found.` };
+            return { success: false, message: `Function ${cleanName} not found.` };
         }
-        return { success: true, message: `Function ${functionName} updated.` };
+        return { success: true, message: `Function ${cleanName} updated.` };
     } catch (err: any) {
         return { success: false, message: `Error modifying function: ${err.message}` };
     }

@@ -104,8 +104,24 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('ooc.quickAddRegularMethods', async (className: string, headerUri: vscode.Uri, methods: any[]) => {
             return await quickCommands.quickAddRegularMethods(className, headerUri, methods);
         }),
-        vscode.commands.registerCommand('ooc.quickWriteCode', async (className: string, headerUri: vscode.Uri, methods: any[]) => {
-            return await quickCommands.quickWriteCode(headerUri, methods.map((m: any) => m.content).join('\n'));
+        vscode.commands.registerCommand('ooc.quickWriteCode', async (headerUri: vscode.Uri, codeContent: string, mode: 'replace' | 'append') => {
+            // 修正后的参数签名，直接从 agentExecutor 传递
+            return await quickCommands.quickWriteCode(headerUri, codeContent, mode || 'append');
+        }),
+        vscode.commands.registerCommand('ooc.quickModifyFunction', async (headerUri: vscode.Uri, functionName: string, codeContent: string, mode: string) => {
+            return await quickCommands.quickModifyFunction(headerUri, functionName, codeContent, mode as 'replace' | 'append');
+        }),
+        vscode.commands.registerCommand('ooc.quickAddPrivateFunction', async (headerUri: vscode.Uri, returnType: string, funcName: string, params: string, body: string) => {
+            return await quickCommands.quickAddPrivateFunction(headerUri, returnType, funcName, params, body);
+        }),
+        vscode.commands.registerCommand('ooc.quickAddGlobalVariable', async (headerUri: vscode.Uri, type: string, name: string, initialValue?: string) => {
+            return await quickCommands.quickAddGlobalVariable(headerUri, type, name, initialValue);
+        }),
+        vscode.commands.registerCommand('ooc.quickAddInclude', async (headerUri: vscode.Uri, includePath: string) => {
+            return await quickCommands.quickAddInclude(headerUri, includePath);
+        }),
+        vscode.commands.registerCommand('ooc.quickReadSource', async (headerUri: vscode.Uri) => {
+            return await quickCommands.quickReadSource(headerUri);
         })
     );
 
@@ -114,7 +130,7 @@ export function activate(context: vscode.ExtensionContext) {
         dispose: () => syncService.dispose()
     });
     console.log('Before activateChatParticipant');
-        // 启动 AI Chat Participant
+    // 启动 AI Chat Participant
     activateChatParticipant(context);
     console.log('After activateChatParticipant');
 }

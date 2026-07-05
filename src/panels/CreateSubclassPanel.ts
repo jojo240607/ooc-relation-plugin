@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
-import { generateSubclassHeader } from '../templates/subclassHeader';
-import { generateSubclassSource } from '../templates/subclassSource';
+import { createSubclassFiles } from '../operations/createSubclassOperation';
 
 export class CreateSubclassPanel {
     public static currentPanel: CreateSubclassPanel | undefined;
@@ -9,8 +8,8 @@ export class CreateSubclassPanel {
     private _disposables: vscode.Disposable[] = [];
 
     private readonly _parentName: string;
+    private readonly _parentHeaderUri: vscode.Uri;      // 新增
     private readonly _defaultTargetDir: vscode.Uri;
-    // 新增：创建成功后的回调
     private readonly _onSubclassCreated?: (
         className: string,
         relativePath: string,
@@ -22,7 +21,7 @@ export class CreateSubclassPanel {
         extensionUri: vscode.Uri,
         defaultTargetDir: vscode.Uri,
         parentName: string,
-        // 新增可选回调
+        parentHeaderUri: vscode.Uri,                    // 新增参数
         onSubclassCreated?: (className: string, relativePath: string, parentName: string | null, hasVtable: boolean) => void
     ) {
         if (CreateSubclassPanel.currentPanel) {
@@ -38,7 +37,7 @@ export class CreateSubclassPanel {
             { enableScripts: true, retainContextWhenHidden: true }
         );
         CreateSubclassPanel.currentPanel = new CreateSubclassPanel(
-            panel, extensionUri, defaultTargetDir, parentName, onSubclassCreated
+            panel, extensionUri, defaultTargetDir, parentName, parentHeaderUri, onSubclassCreated
         );
     }
 
@@ -47,13 +46,15 @@ export class CreateSubclassPanel {
         extensionUri: vscode.Uri,
         defaultTargetDir: vscode.Uri,
         parentName: string,
+        parentHeaderUri: vscode.Uri,                    // 新增
         onSubclassCreated?: (className: string, relativePath: string, parentName: string | null, hasVtable: boolean) => void
     ) {
         this._panel = panel;
         this._extensionUri = extensionUri;
         this._defaultTargetDir = defaultTargetDir;
         this._parentName = parentName;
-        this._onSubclassCreated = onSubclassCreated; // 保存回调
+        this._parentHeaderUri = parentHeaderUri;
+        this._onSubclassCreated = onSubclassCreated;
 
         this._update();
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
@@ -107,32 +108,26 @@ export class CreateSubclassPanel {
             const targetDir = vscode.Uri.file(targetDirStr);
             try { await vscode.workspace.fs.createDirectory(targetDir); } catch {}
 
-            const headerContent = generateSubclassHeader(childName, this._parentName);
-            const sourceContent = generateSubclassSource(childName, this._parentName);
-
-            const headerUri = vscode.Uri.joinPath(targetDir, `${childName}.h`);
-            const sourceUri = vscode.Uri.joinPath(targetDir, `${childName}.c`);
-
-            if ((await exists(headerUri)) || (await exists(sourceUri))) {
+            // 先尝试非强制创建
+            let result = await createSubclassFiles(this._parentName, this._parentHeaderUri, childName, targetDir, false);
+            if (!result.success && result.message.includes('already exists')) {
                 const overwrite = await vscode.window.showWarningMessage(
                     `File(s) for subclass "${childName}" already exist. Overwrite?`,
                     { modal: true },
                     'Yes'
                 );
-                if (overwrite !== 'Yes') return;
+                if (overwrite === 'Yes') {
+                    result = await createSubclassFiles(this._parentName, this._parentHeaderUri, childName, targetDir, true);
+                }
             }
 
-            await vscode.workspace.fs.writeFile(headerUri, Buffer.from(headerContent));
-            await vscode.workspace.fs.writeFile(sourceUri, Buffer.from(sourceContent));
-            const doc = await vscode.workspace.openTextDocument(headerUri);
-            await vscode.window.showTextDocument(doc);
+            if (!result.success) {
+                vscode.window.showErrorMessage(result.message);
+                return;
+            }
+
             vscode.window.showInformationMessage(`Subclass "${childName}" extending "${this._parentName}" created.`);
-
-            // ===== 新增：回调通知外部同步缓存 =====
-            const relativePath = vscode.workspace.asRelativePath(headerUri);
-            // 子类：父类为 this._parentName，初始 hasVtable = false
-            this._onSubclassCreated?.(childName, relativePath, this._parentName, false);
-
+            this._onSubclassCreated?.(childName, result.relativePath!, this._parentName, false);
             this._panel.dispose();
         } catch (err) {
             vscode.window.showErrorMessage(`Failed to create subclass: ${err}`);

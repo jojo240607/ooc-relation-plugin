@@ -1,11 +1,6 @@
 import * as vscode from 'vscode';
+import { addVirtualMethods } from '../operations/addVirtualMethodOperation';
 import * as ast from '../utils/astUtils';
-
-interface MethodEntry {
-    name: string;
-    returnType: string;
-    params: string;
-}
 
 interface AncestorVirtualMethod {
     returnType: string;
@@ -25,10 +20,7 @@ export class AddMethodPanel {
     private readonly _sourceUri: vscode.Uri;
     private readonly _inheritedMethods: AncestorVirtualMethod[];
     private readonly _currentMethods: { returnType: string; name: string; params: string }[];
-    // 新增：添加完成后的回调
     private readonly _onModified?: (className: string, relativePath: string, parentName: string | null, hasVtable: boolean) => void;
-    private readonly _needsVtable: boolean;
-    private readonly _onBeforeAddMethods?: () => Promise<boolean>;
 
     public static createOrShow(
         extensionUri: vscode.Uri,
@@ -37,8 +29,6 @@ export class AddMethodPanel {
         sourceUri: vscode.Uri,
         inheritedMethods: AncestorVirtualMethod[],
         currentMethods: { returnType: string; name: string; params: string }[],
-        needsVtable: boolean,                                  // 新增
-        onBeforeAddMethods?: () => Promise<boolean>,           // 新增
         onModified?: (className: string, relativePath: string, parentName: string | null, hasVtable: boolean) => void
     ) {
         if (AddMethodPanel.currentPanel) {
@@ -54,8 +44,7 @@ export class AddMethodPanel {
             { enableScripts: true, retainContextWhenHidden: true }
         );
         AddMethodPanel.currentPanel = new AddMethodPanel(
-            panel, extensionUri, className, headerUri, sourceUri, inheritedMethods, currentMethods, 
-            needsVtable, onBeforeAddMethods, onModified
+            panel, extensionUri, className, headerUri, sourceUri, inheritedMethods, currentMethods, onModified
         );
     }
 
@@ -67,8 +56,6 @@ export class AddMethodPanel {
         sourceUri: vscode.Uri,
         inheritedMethods: AncestorVirtualMethod[],
         currentMethods: { returnType: string; name: string; params: string }[],
-        needsVtable: boolean,
-        onBeforeAddMethods?: () => Promise<boolean>,
         onModified?: (className: string, relativePath: string, parentName: string | null, hasVtable: boolean) => void
     ) {
         this._panel = panel;
@@ -79,20 +66,15 @@ export class AddMethodPanel {
         this._inheritedMethods = inheritedMethods;
         this._currentMethods = currentMethods;
         this._onModified = onModified;
-        this._needsVtable = needsVtable;
-        this._onBeforeAddMethods = onBeforeAddMethods;
 
         this._update();
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
         this._panel.webview.onDidReceiveMessage(
             async (message) => {
-                switch (message.command) {
-                    case 'addMethods':
-                        await this._handleAddMethods(message.methods);
-                        return;
-                    case 'cancel':
-                        this._panel.dispose();
-                        return;
+                if (message.command === 'addMethods') {
+                    await this._handleAddMethods(message.methods);
+                } else if (message.command === 'cancel') {
+                    this._panel.dispose();
                 }
             },
             null,
@@ -113,9 +95,9 @@ export class AddMethodPanel {
         this._panel.webview.html = this._getHtmlContent();
     }
 
-    private async _handleAddMethods(methods: MethodEntry[]) {
+    private async _handleAddMethods(methods: { returnType: string; name: string; params: string }[]) {
         try {
-            // 检查重名（前端已做，此处再次保证）
+            // 重名检查
             const allExistingNames = [
                 ...this._inheritedMethods.map(m => m.name),
                 ...this._currentMethods.map(m => m.name)
@@ -126,67 +108,25 @@ export class AddMethodPanel {
                     return;
                 }
             }
-            // 如果需要添加虚表，先调用外部函数
-            if (this._needsVtable && this._onBeforeAddMethods) {
-                const success = await this._onBeforeAddMethods();
-                if (!success) {
-                    vscode.window.showErrorMessage('Failed to add virtual table.');
-                    return;
-                }
+
+            // 调用统一操作函数
+            const result = await addVirtualMethods(this._className, this._headerUri, methods);
+            if (!result.success) {
+                vscode.window.showErrorMessage(result.message);
+                return;
             }
-            for (const m of methods) {
-                const selfParam = `${this._className} *self`;
-                const fullParams = m.params ? `${selfParam}, ${m.params}` : selfParam;
 
-                // 头文件：插入虚函数声明
-                const headerDoc = await vscode.workspace.openTextDocument(this._headerUri);
-                const vtableName = `${this._className}Vtable`;
-                const funcPtrDecl = `${m.returnType} (*${m.name})(${fullParams});`;
-                await ast.insertStructMember(headerDoc, vtableName, funcPtrDecl);
-
-                // 源文件：前向声明
-                const defaultFuncName = `default_${this._className}_${m.name}_impl`;
-                let sourceDoc = await vscode.workspace.openTextDocument(this._sourceUri);
-                const decl = `static ${m.returnType} ${defaultFuncName}(${fullParams});`;
-                if (!sourceDoc.getText().includes(decl)) {
-                    await ast.insertAfterIncludes(sourceDoc, decl);
-                }
-
-                // 源文件：默认实现
-                const defaultReturn = m.returnType === 'void' ? '' : `static ${m.returnType} ret = {0}; return ret;`;
-                const defaultImpl = `
-static ${m.returnType} ${defaultFuncName}(${fullParams}) {
-    /* TODO: Implement default behavior */
-    (void)self;
-    ${defaultReturn}
-}
-`;
-                sourceDoc = await vscode.workspace.openTextDocument(this._sourceUri);
-                await ast.insertAtEndOfFile(sourceDoc, defaultImpl);
-
-                // 源文件：虚表赋值
-                const vtableAssign = `self->vtable->${m.name} = ${defaultFuncName};`;
-                sourceDoc = await vscode.workspace.openTextDocument(this._sourceUri);
-                await ast.insertBeforeFunctionEnd(sourceDoc, `${this._className}_init`, vtableAssign);
-            }
-            // 保存文件
-            const finalHeaderDoc = await vscode.workspace.openTextDocument(this._headerUri);
-            await finalHeaderDoc.save();
-            const finalSourceDoc = await vscode.workspace.openTextDocument(this._sourceUri);
-            await finalSourceDoc.save();
-
-            // 调用回调，通知外部更新缓存
+            // 回调通知外部（用于更新视图等）
             if (this._onModified) {
-                // 解析父类名（从当前头文件）
+                // 获取父类和虚表状态（操作后虚表一定存在）
                 const headerDoc = await vscode.workspace.openTextDocument(this._headerUri);
                 const structInfo = ast.findStruct(headerDoc, this._className);
                 const parentName = structInfo ? ast.getParentClassName(structInfo, headerDoc) : null;
                 const relativePath = vscode.workspace.asRelativePath(this._headerUri);
-                // 此时虚表已经存在（在 addVirtualMethod 中提前添加了），hasVtable = true
                 this._onModified(this._className, relativePath, parentName, true);
             }
 
-            vscode.window.showInformationMessage(`Successfully added ${methods.length} method(s) to ${this._className}.`);
+            vscode.window.showInformationMessage(result.message);
             this._panel.dispose();
         } catch (err) {
             vscode.window.showErrorMessage(`Failed to add methods: ${err}`);

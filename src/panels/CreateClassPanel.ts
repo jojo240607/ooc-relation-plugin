@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
-import { generateHeader } from '../templates/classHeader';
-import { generateSource } from '../templates/classSource';
+import { createClassFiles } from '../operations/createClassOperation';
 
 export class CreateClassPanel {
     public static currentPanel: CreateClassPanel | undefined;
@@ -98,31 +97,23 @@ export class CreateClassPanel {
     private async _handleCreate(className: string, targetDirStr: string) {
         try {
             const targetDir = vscode.Uri.file(targetDirStr);
+            // 确保目录存在
             try { await vscode.workspace.fs.createDirectory(targetDir); } catch {}
-            const headerContent = generateHeader(className);
-            const sourceContent = generateSource(className);
-            const headerUri = vscode.Uri.joinPath(targetDir, `${className}.h`);
-            const sourceUri = vscode.Uri.joinPath(targetDir, `${className}.c`);
-            if ((await exists(headerUri)) || (await exists(sourceUri))) {
-                const overwrite = await vscode.window.showWarningMessage(
-                    `File(s) for class "${className}" already exist. Overwrite?`,
-                    { modal: true },
-                    'Yes'
-                );
-                if (overwrite !== 'Yes') return;
+
+            const result = await createClassFiles(className, targetDir);
+            if (!result.success) {
+                vscode.window.showErrorMessage(result.message);
+                return;
             }
-            await vscode.workspace.fs.writeFile(headerUri, Buffer.from(headerContent));
-            await vscode.workspace.fs.writeFile(sourceUri, Buffer.from(sourceContent));
-            const doc = await vscode.workspace.openTextDocument(headerUri);
-            await vscode.window.showTextDocument(doc);
+
+            // 面板特有的操作：显示成功消息并关闭
             vscode.window.showInformationMessage(`OOC class "${className}" created.`);
-
-            // ===== 新增：回调通知外部同步缓存 =====
-            const relativePath = vscode.workspace.asRelativePath(headerUri);
-            // 基类：parent = null, hasVtable = false
-            this._onClassCreated?.(className, relativePath, null, false);
-
             this._panel.dispose();
+
+            // 回调通知外部（例如刷新视图等）
+            if (this._onClassCreated) {
+                this._onClassCreated(className, result.relativePath!, null, false);
+            }
         } catch (err) {
             vscode.window.showErrorMessage(`Failed to create class: ${err}`);
         }

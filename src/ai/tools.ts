@@ -163,5 +163,86 @@ export const OOC_TOOLS = [
                 required: ['headerPath', 'code']
             }
         }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'modify_function_body',
+            description: 'Modify the body of an existing function in the source file. Use mode "replace" to completely rewrite the function body, or "append" to add code at the end of the function.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    headerPath: { type: 'string', description: 'Absolute path to the header file (.h)' },
+                    functionName: { type: 'string', description: 'Name of the function to modify' },
+                    codeContent: { type: 'string', description: 'The new code for replace mode, or the code snippet to append' },
+                    mode: { type: 'string', enum: ['replace', 'append'], description: 'Whether to replace the entire function body or append to it' }
+                },
+                required: ['headerPath', 'functionName', 'codeContent', 'mode']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'add_private_function',
+            description: 'Add a static (private) function to the source file.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    headerPath: { type: 'string' },
+                    returnType: { type: 'string' },
+                    funcName: { type: 'string' },
+                    params: { type: 'string', description: 'Function parameters without self pointer' },
+                    body: { type: 'string', description: 'Function body code, without enclosing braces' }
+                },
+                required: ['headerPath', 'returnType', 'funcName', 'params', 'body']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'add_global_variable',
+            description: 'Add a static global variable to the source file.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    headerPath: { type: 'string' },
+                    type: { type: 'string' },
+                    name: { type: 'string' },
+                    initialValue: { type: 'string', description: 'Optional initializer' }
+                },
+                required: ['headerPath', 'type', 'name']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'add_include',
+            description: 'Add an include directive to the source file.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    headerPath: { type: 'string' },
+                    includePath: { type: 'string', description: 'Include path in quotes or angle brackets' }
+                },
+                required: ['headerPath', 'includePath']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'read_source_file',
+            description: 'Read the current content of the source (.c) file associated with the given header file. Returns the full text.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    headerPath: { type: 'string', description: 'Absolute path to the header file (.h)' }
+                },
+                required: ['headerPath']
+            }
+        }
     }
 ];

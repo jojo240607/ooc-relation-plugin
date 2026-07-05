@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import * as ast from '../utils/astUtils';
+import { addMembersToClass } from '../operations/addMembersOperation';
 
 export class AddMemberPanel {
     public static currentPanel: AddMemberPanel | undefined;
@@ -77,45 +77,19 @@ export class AddMemberPanel {
 
     private async _handleAdd(members: { type: string; name: string }[]) {
         try {
-            const doc = await vscode.workspace.openTextDocument(this._headerUri);
-            const structInfo = ast.findStruct(doc, this._className);
-            if (!structInfo) {
-                vscode.window.showErrorMessage(`Could not find struct ${this._className} in header.`);
+            const result = await addMembersToClass(this._className, this._headerUri, members);
+            if (!result.success) {
+                vscode.window.showErrorMessage(result.message);
                 return;
             }
 
-            const endLine = structInfo.bodyEnd;
-            if (endLine < 0) {
-                vscode.window.showErrorMessage('Invalid struct definition.');
-                return;
-            }
-
-            const lines = doc.getText().split('\n');
-            const braceLine = lines[endLine];
-            const braceIndentMatch = braceLine.match(/^(\s*)/);
-            const baseIndent = braceIndentMatch ? braceIndentMatch[0] : '';
-            const memberIndent = baseIndent + '    ';
-
-            const declarations = members.map(m => `${memberIndent}${m.type} ${m.name};`).join('\n');
-
-            const insertPos = doc.offsetAt(new vscode.Position(endLine, 0));
-            const newText = doc.getText().slice(0, insertPos) + declarations + '\n' + doc.getText().slice(insertPos);
-
-            const we = new vscode.WorkspaceEdit();
-            const fullRange = new vscode.Range(
-                doc.positionAt(0),
-                doc.positionAt(doc.getText().length)
-            );
-            we.replace(this._headerUri, fullRange, newText);
-            await vscode.workspace.applyEdit(we);
-
-            // 新增：回调通知外部（更新关系表）
+            // 回调通知外部
             if (this._onModified) {
                 const relativePath = vscode.workspace.asRelativePath(this._headerUri);
                 this._onModified(this._className, relativePath);
             }
 
-            vscode.window.showInformationMessage(`Added ${members.length} member(s) to ${this._className}.`);
+            vscode.window.showInformationMessage(result.message);
             this._panel.dispose();
         } catch (err) {
             vscode.window.showErrorMessage(`Failed to add members: ${err}`);

@@ -8,6 +8,11 @@ export { quickOverrideMethod } from './quickOverrideMethod';
 export { quickAddMembers } from './quickAddMembers';
 export { quickAddRegularMethods } from './quickAddRegularMethods';
 export { quickWriteCode } from './quickWriteCode';
+export { quickModifyFunction } from './quickModifyFunction';
+export { quickAddPrivateFunction } from './quickCodeModifications';
+export { quickAddGlobalVariable } from './quickCodeModifications';
+export { quickAddInclude } from './quickCodeModifications';    
+export { quickReadSource } from './quickReadSource';
 
 // 也可以在此统一定义类型，如命令返回结果等
 export interface QuickCommandResult {

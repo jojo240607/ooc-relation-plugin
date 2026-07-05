@@ -558,3 +558,162 @@ export function getFunMethods(document: vscode.TextDocument, className: string):
     }
     return methods;
 }
+
+/**
+ * 替换指定函数的函数体
+ * @param document 源文件文档
+ * @param functionName 函数名
+ * @param newBody 新函数体代码（不含大括号）
+ */
+export async function replaceFunctionBody(
+    document: vscode.TextDocument,
+    functionName: string,
+    newBody: string
+): Promise<boolean> {
+    const func = findFunction(document, functionName);
+    if (!func) return false;
+    const we = new vscode.WorkspaceEdit();
+    const range = new vscode.Range(
+        new vscode.Position(func.bodyStart, 0),
+        new vscode.Position(func.bodyEnd, document.lineAt(func.bodyEnd).text.length)
+    );
+    // 保留原有缩进（使用函数体第一行的缩进）
+    const firstLine = document.lineAt(func.bodyStart).text;
+    const indent = firstLine.match(/^(\s*)/)?.[0] ?? '';
+    const indentedBody = newBody.split('\n').map(line => `${indent}    ${line}`).join('\n');
+    we.replace(document.uri, range, `{\n${indentedBody}\n${indent}}`);
+    await vscode.workspace.applyEdit(we);
+    await document.save();
+    return true;
+}
+
+/**
+ * 在函数体末尾追加代码
+ */
+export async function appendToFunctionBody(
+    document: vscode.TextDocument,
+    functionName: string,
+    codeSnippet: string
+): Promise<boolean> {
+    const func = findFunction(document, functionName);
+    if (!func) return false;
+    const lastLineOfBody = func.bodyEnd - 1; // 结束大括号前一行
+    const we = new vscode.WorkspaceEdit();
+    const pos = new vscode.Position(lastLineOfBody, document.lineAt(lastLineOfBody).text.length);
+    const indent = document.lineAt(func.bodyStart).text.match(/^(\s*)/)?.[0] + '    ';
+    we.insert(document.uri, pos, `\n${indent}${codeSnippet}`);
+    await vscode.workspace.applyEdit(we);
+    await document.save();
+    return true;
+}
+
+/**
+ * 查找第一个 Fun 表实例定义的行号（如 `const struct DogFun Dog_fun = {`）
+ * 返回行号，如果未找到则返回 -1
+ */
+function findFunTableLine(document: vscode.TextDocument): number {
+    const regex = /const\s+struct\s+\w+Fun\s+\w+\s*=\s*\{/;
+    for (let i = 0; i < document.lineCount; i++) {
+        if (regex.test(document.lineAt(i).text)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/**
+ * 在源文件合适位置插入 static 变量定义（Fun 表之前，或 include 之后）
+ */
+export async function insertGlobalVariable(
+    document: vscode.TextDocument,
+    type: string,
+    name: string,
+    initialValue?: string
+): Promise<boolean> {
+    try {
+        let insertLine = findFunTableLine(document);
+        if (insertLine === -1) {
+            // 未找到 Fun 表，退回 include 区域之后
+            let lastIncludeLine = 0;
+            for (let i = 0; i < document.lineCount; i++) {
+                if (document.lineAt(i).text.trim().startsWith('#include')) {
+                    lastIncludeLine = i;
+                }
+            }
+            insertLine = lastIncludeLine + 1;
+        }
+        // 插入点：目标行之前
+        const pos = new vscode.Position(insertLine, 0);
+        const we = new vscode.WorkspaceEdit();
+        const init = initialValue ? ` = ${initialValue}` : '';
+        const code = `static ${type} ${name}${init};\n`;
+        we.insert(document.uri, pos, code);
+        await vscode.workspace.applyEdit(we);
+        await document.save();
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * 在源文件末尾插入一个 static 函数定义
+ */
+export async function insertPrivateFunction(
+    document: vscode.TextDocument,
+    returnType: string,
+    funcName: string,
+    params: string,
+    body: string
+): Promise<boolean> {
+    try {
+        // 1. 插入前向声明（如果不存在）
+        const decl = `static ${returnType} ${funcName}(${params});`;
+        const text = document.getText();
+        if (!text.includes(decl)) {
+            // 找到最后一个 #include 行，在其下方插入
+            let lastIncludeLine = -1;
+            for (let i = 0; i < document.lineCount; i++) {
+                if (document.lineAt(i).text.trim().startsWith('#include')) {
+                    lastIncludeLine = i;
+                }
+            }
+            const insertLine = lastIncludeLine >= 0 ? lastIncludeLine + 1 : 0;
+            const weDecl = new vscode.WorkspaceEdit();
+            weDecl.insert(document.uri, new vscode.Position(insertLine, 0), decl + '\n');
+            await vscode.workspace.applyEdit(weDecl);
+            // 重新获取文档（内容已变）
+            document = await vscode.workspace.openTextDocument(document.uri);
+        }
+
+        // 2. 插入函数定义到文件末尾
+        const lastLine = document.lineAt(document.lineCount - 1);
+        const pos = new vscode.Position(lastLine.range.end.line + 1, 0);
+        const weDef = new vscode.WorkspaceEdit();
+        const code = `\nstatic ${returnType} ${funcName}(${params}) {\n${body}\n}\n`;
+        weDef.insert(document.uri, pos, code);
+        await vscode.workspace.applyEdit(weDef);
+        await document.save();
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * 在源文件头部添加 #include
+ */
+export async function insertInclude(
+    document: vscode.TextDocument,
+    includePath: string
+): Promise<boolean> {
+    try {
+        const we = new vscode.WorkspaceEdit();
+        we.insert(document.uri, new vscode.Position(0, 0), `#include ${includePath}\n`);
+        await vscode.workspace.applyEdit(we);
+        await document.save();
+        return true;
+    } catch {
+        return false;
+    }
+}

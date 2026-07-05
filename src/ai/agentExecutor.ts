@@ -59,7 +59,7 @@ export async function executeFunctionCalls(calls: FunctionCall[]): Promise<strin
                         headerPath = resolveHeaderPath(call.arguments.className);
                     }
                     const headerUri = vscode.Uri.file(headerPath);
-                    // 始终自动计算 vtablePath，忽略 AI 传入的值
+                    // 自动计算 vtablePath，忽略 AI 传入的值
                     const depth = computeDepth(call.arguments.className, call.arguments.fromClass);
                     const vtablePath = depth > 0 ? Array(depth).fill('parent').join('.') + '.vtable' : 'vtable';
                     result = await vscode.commands.executeCommand('ooc.quickOverrideMethod',
@@ -88,12 +88,47 @@ export async function executeFunctionCalls(calls: FunctionCall[]): Promise<strin
                     break;
                 }
                 case 'write_source_code': {
+                    // 仅提取必要的参数
                     const headerPath = call.arguments.headerPath;
-                    const code = call.arguments.code || '';
+                    const code = typeof call.arguments.code === 'string' ? call.arguments.code : '';
                     const mode = call.arguments.mode || 'append';
                     const headerUri = vscode.Uri.file(headerPath);
                     result = await vscode.commands.executeCommand('ooc.quickWriteCode',
                         headerUri, code, mode);
+                    break;
+                }
+                case 'modify_function_body': {
+                    const headerPath = call.arguments.headerPath;
+                    const functionName = call.arguments.functionName;
+                    const codeContent = call.arguments.codeContent;
+                    const mode = call.arguments.mode || 'append';
+                    const headerUri = vscode.Uri.file(headerPath);
+                    result = await vscode.commands.executeCommand('ooc.quickModifyFunction',
+                        headerUri, functionName, codeContent, mode);
+                    break;
+                }
+                case 'add_private_function': {
+                    const headerUri = vscode.Uri.file(call.arguments.headerPath);
+                    result = await vscode.commands.executeCommand('ooc.quickAddPrivateFunction',
+                        headerUri, call.arguments.returnType, call.arguments.funcName,
+                        call.arguments.params, call.arguments.body);
+                    break;
+                }
+                case 'add_global_variable': {
+                    const headerUri = vscode.Uri.file(call.arguments.headerPath);
+                    result = await vscode.commands.executeCommand('ooc.quickAddGlobalVariable',
+                        headerUri, call.arguments.type, call.arguments.name, call.arguments.initialValue);
+                    break;
+                }
+                case 'add_include': {
+                    const headerUri = vscode.Uri.file(call.arguments.headerPath);
+                    result = await vscode.commands.executeCommand('ooc.quickAddInclude',
+                        headerUri, call.arguments.includePath);
+                    break;
+                }
+                case 'read_source_file': {
+                    const headerUri = vscode.Uri.file(call.arguments.headerPath);
+                    result = await vscode.commands.executeCommand('ooc.quickReadSource', headerUri);
                     break;
                 }
                 default:
@@ -125,9 +160,6 @@ function resolveHeaderPath(className: string): string {
     return `${className}.h`;
 }
 
-/**
- * 计算从 childName 到 ancestorName 需要经过多少个 parent 层级
- */
 function computeDepth(childName: string, ancestorName: string): number {
     let depth = 0;
     let current = childName;

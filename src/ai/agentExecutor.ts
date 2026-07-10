@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { relationStore } from '../sync/ClassRelationStore';
 import { FunctionCall } from './deepseekClient';
+import * as quickCommands from '../commands/quickCommands';
 
 function isAlreadyExists(msg: string): boolean {
     return msg.includes('already exists');
@@ -88,13 +89,22 @@ export async function executeFunctionCalls(calls: FunctionCall[]): Promise<strin
                     break;
                 }
                 case 'write_source_code': {
-                    // 仅提取必要的参数
-                    const headerPath = call.arguments.headerPath;
+                    const outputPath = call.arguments.outputPath as string | undefined;
+                    const headerPath = call.arguments.headerPath as string | undefined;
                     const code = typeof call.arguments.code === 'string' ? call.arguments.code : '';
-                    const mode = call.arguments.mode || 'append';
-                    const headerUri = vscode.Uri.file(headerPath);
-                    result = await vscode.commands.executeCommand('ooc.quickWriteCode',
-                        headerUri, code, mode);
+                    const modeStr = (call.arguments.mode as string) || 'append';
+                    const mode: 'replace' | 'append' = (modeStr === 'replace') ? 'replace' : 'append';
+                    if (outputPath) {
+                        // 直接使用 outputPath 调用（不走命令，直接调用 writeCode 或独立实现）
+                        
+                        result = await quickCommands.quickWriteCodeToPath(outputPath, code, mode);
+                    } else if (headerPath) {
+                        const headerUri = vscode.Uri.file(headerPath);
+                        result = await vscode.commands.executeCommand('ooc.quickWriteCode',
+                            headerUri, code, mode);
+                    } else {
+                        result =  { success: false, message: '❌ write_source_code 必须提供 headerPath 或 outputPath' };
+                    }
                     break;
                 }
                 case 'modify_function_body': {
@@ -129,6 +139,11 @@ export async function executeFunctionCalls(calls: FunctionCall[]): Promise<strin
                 case 'read_source_file': {
                     const headerUri = vscode.Uri.file(call.arguments.headerPath);
                     result = await vscode.commands.executeCommand('ooc.quickReadSource', headerUri);
+                    break;
+                }
+                case 'set_code_section': {
+                    const { headerPath, sectionName, newCode, sectionType = 'auto' } = call.arguments;
+                    result = await quickCommands.quickSetCodeSection(headerPath, sectionName, newCode, sectionType);
                     break;
                 }
                 default:

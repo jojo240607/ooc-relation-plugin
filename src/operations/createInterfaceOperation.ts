@@ -9,13 +9,15 @@ import { syncService } from '../sync/ClassSyncService'; // 根据实际路径调
  * @param targetDirUri 目标目录 URI
  * @param methods 接口方法列表
  * @param force 是否强制覆盖已存在的文件
+ * @param silent 是否打开文件
  * @returns 操作结果，成功时附带相对路径
  */
 export async function createInterfaceFiles(
     interfaceName: string,
     targetDirUri: vscode.Uri,
     methods: { returnType: string; name: string; params: string }[],
-    force: boolean = false
+    force: boolean = false,
+    silent: boolean = false
 ): Promise<{ success: boolean; message: string; relativePath?: string }> {
     try {
         const headerUri = vscode.Uri.joinPath(targetDirUri, `${interfaceName}.h`);
@@ -37,11 +39,11 @@ export async function createInterfaceFiles(
         const relativePath = vscode.workspace.asRelativePath(headerUri);
         const hasVtable = methods.length > 0; // 有虚函数则视为有虚表
         await syncService.registerClass(interfaceName, relativePath, null, hasVtable, true);
-
-        // 打开生成的头文件
-        const doc = await vscode.workspace.openTextDocument(headerUri);
-        await vscode.window.showTextDocument(doc, { preview: false });
-
+        if (!silent) {
+            // 打开生成的头文件
+            const doc = await vscode.workspace.openTextDocument(headerUri);
+            await vscode.window.showTextDocument(doc, { preview: false });
+        }
         return { success: true, message: `Interface ${interfaceName} created at ${relativePath}`, relativePath };
     } catch (err: any) {
         return { success: false, message: `Error creating interface: ${err.message}` };

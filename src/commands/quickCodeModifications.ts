@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { addPrivateFunction, addGlobalVariable, addInclude } from '../operations/modifySourceOperations';
+import { addPrivateFunction, addGlobalVariable, addInclude, setCodeSection } from '../operations/modifySourceOperations';
+import { modifyFunctionBody } from '../operations/modifySourceOperations';
 
 export async function quickAddPrivateFunction(
     headerUri: vscode.Uri,
@@ -25,4 +26,23 @@ export async function quickAddInclude(
     includePath: string
 ): Promise<{ success: boolean; message: string }> {
     return await addInclude(headerUri, includePath);
+}
+
+
+export async function quickSetCodeSection(
+    headerPath: string,
+    sectionName: string,
+    newCode: string,
+    sectionType: 'function' | 'struct' | 'auto' = 'auto'
+): Promise<{ success: boolean; message: string }> {
+    return await setCodeSection(headerPath, sectionName, newCode, sectionType);
+}
+
+export async function quickModifyFunction(
+    headerUri: vscode.Uri,
+    functionName: string,
+    codeContent: string,
+    mode: 'replace' | 'append' = 'append'
+): Promise<{ success: boolean; message: string }> {
+    return await modifyFunctionBody(headerUri, functionName, codeContent, mode);
 }

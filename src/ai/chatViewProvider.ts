@@ -23,6 +23,9 @@ interface PersistedData {
 const MAX_HISTORY_SIZE = 20;
 const execAsync = promisify(exec);
 
+// 工具结果最大字符数（超过则截断）
+const TOOL_RESULT_MAX_LENGTH = 2000;
+
 function trimHistoryByTurns(history: any[], maxTurns: number): any[] {
     const turns: any[][] = [];
     let currentTurn: any[] = [];
@@ -143,6 +146,112 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         });
     }
 
+    // ========== 新增：工具结果截断 ==========
+    private _truncateToolResult(result: string, maxLen: number = TOOL_RESULT_MAX_LENGTH): string {
+        if (result.length <= maxLen) return result;
+        return result.substring(0, maxLen) + `\n... [工具返回过长，已截断，剩余 ${result.length - maxLen} 字符]`;
+    }
+
+    // ========== 新增：加载基础系统提示（不含动态信息） ==========
+    private _loadBasePrompt(): string {
+        const workspaceRoot = this._workspaceRoot;
+        if (workspaceRoot) {
+            const projectPromptPath = path.join(workspaceRoot, '.vscode', 'ooc-ai-prompt.txt');
+            if (fs.existsSync(projectPromptPath)) {
+                const content = fs.readFileSync(projectPromptPath, 'utf-8').trim();
+                if (content) return content;
+            }
+        }
+        return this._loadDefaultPrompt();
+    }
+
+    // ========== 新增：构建动态上下文（作为 user 消息） ==========
+    private async _buildDynamicContext(existingClassesInfo: string): Promise<string> {
+        let context = `Workspace root: ${this._workspaceRoot}\nExisting classes:\n${existingClassesInfo || 'none'}`;
+
+        try {
+            const projName = await this._getMcpProjectName();
+            if (projName) {
+                context += `\nCurrent MCP project name: "${projName}" (use this as 'project' parameter in MCP tools)`;
+            }
+        } catch (e) {
+            console.error('[ChatView] Failed to get MCP project name for context:', e);
+        }
+
+        try {
+            const mcpTools = await this.mcpClient.getTools();
+            if (mcpTools.length > 0) {
+                const toolLines = mcpTools.map((t: any) => {
+                    const required = t.inputSchema?.required || [];
+                    const reqStr = required.length > 0 ? `【必填：${required.join(', ')}】` : '';
+                    return `- ${t.name} ${reqStr}：${t.description?.split('.')[0] || ''}`;
+                });
+                context += `\n\n## 当前可用的 MCP 分析工具\n${toolLines.join('\n')}`;
+            }
+        } catch (e) {
+            console.error('[ChatView] Failed to attach MCP tools to context:', e);
+        }
+
+        return context;
+    }
+
+    // ========== 新增：历史摘要与压缩 ==========
+    private async _maybeSummarizeHistory(): Promise<void> {
+        const SUMMARY_THRESHOLD = 30; // 消息条数阈值
+        if (this._fullHistory.length <= SUMMARY_THRESHOLD) return;
+
+        // 保留最近 10 条消息，其余部分生成摘要
+        const recentCount = 10;
+        const oldMessages = this._fullHistory.slice(0, this._fullHistory.length - recentCount);
+        const recentMessages = this._fullHistory.slice(-recentCount);
+
+        try {
+            const summary = await this._summarizeConversation(oldMessages);
+            if (summary) {
+                // 用摘要替代旧消息，放入 user 消息
+                this._fullHistory = [
+                    { role: 'user', content: `[历史对话摘要]\n${summary}` },
+                    ...recentMessages
+                ];
+
+                // 同步压缩 chatHistory（前端显示用）
+                // 取出 chatHistory 中对应旧消息的部分（简单处理：保留最后 5 轮用户/助手对话）
+                const oldChatMessages = this._chatHistory.slice(0, Math.max(0, this._chatHistory.length - 5));
+                if (oldChatMessages.length > 0) {
+                    const chatSummary = await this._summarizeConversation(
+                        oldChatMessages.map(m => ({ role: m.role, content: m.text }))
+                    );
+                    this._chatHistory = [
+                        { role: 'system', text: `对话摘要：${chatSummary}` },
+                        ...this._chatHistory.slice(-5)
+                    ];
+                }
+            }
+        } catch (e) {
+            console.error('[ChatView] History summarization failed, falling back to truncation:', e);
+            // 摘要失败时，直接丢弃最旧的消息，保留最近 20 条
+            this._fullHistory = this._fullHistory.slice(-20);
+            this._chatHistory = this._chatHistory.slice(-10);
+        }
+    }
+
+    private async _summarizeConversation(messages: any[]): Promise<string> {
+        // 仅提取 user 和 assistant 的文本内容，避免工具调用细节干扰
+        const textPairs = messages
+            .filter(m => m.role === 'user' || m.role === 'assistant')
+            .map(m => `${m.role}: ${m.content || ''}`)
+            .join('\n');
+
+        if (!textPairs.trim()) return '';
+
+        const summaryMessages = [
+            { role: 'system', content: '你是一个对话摘要助手。请将以下对话历史总结为一段300字以内的中文摘要，只保留关键问题和结论。' },
+            { role: 'user', content: textPairs }
+        ];
+
+        return await callDeepSeekForText(summaryMessages);
+    }
+
     private async _handleAsk(userInput: string) {
         if (!this._view || !userInput) return;
 
@@ -165,19 +274,29 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         } catch (err) {
             console.error('[ChatView] Failed to get existing classes:', err);
         }
-        const contextInfo = `Workspace root: ${this._workspaceRoot}\nExisting classes:\n${existingClassesInfo || 'none'}`;
 
-        let systemPrompt: string;
+        // 1. 加载固定系统提示（不含动态信息）
+        let basePrompt: string;
         try {
-            systemPrompt = await this._loadSystemPrompt(contextInfo);
+            basePrompt = this._loadBasePrompt();
         } catch (err: any) {
             this._sendError(`❌ 配置错误: ${err.message}`);
             return;
         }
 
+        // 2. 尝试进行历史摘要
+        await this._maybeSummarizeHistory();
+
+        // 3. 构建动态上下文（作为 user 消息）
+        const dynamicContext = await this._buildDynamicContext(existingClassesInfo);
+
+        // 4. 组装 messages：固定 system + 动态 user + 历史
         const messages: any[] = [
-            { role: 'system', content: systemPrompt }
+            { role: 'system', content: basePrompt },
+            { role: 'user', content: `[系统上下文]\n${dynamicContext}` }
         ];
+
+        // 历史中不应再有 system 消息，但安全起见过滤掉
         const cleanHistory = this._fullHistory.filter(m => m.role !== 'system');
         messages.push(...cleanHistory);
 
@@ -205,16 +324,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
                 this._view.webview.postMessage({ command: 'stepResult', text: resultText });
                 allResults.push(...results);
 
+                // 处理 update_ai_prompt （插入 user 消息而非 system）
                 calls.forEach((call, idx) => {
                     if (call.name === 'update_ai_prompt' && results[idx]?.startsWith('✅')) {
                         const content = call.arguments.content;
                         messages.push({
-                            role: 'system',
+                            role: 'user',   // 改为 user 角色
                             content: `【提示词已更新】请立即遵守以下新规则：\n${content.substring(0, 500)}`
                         });
                     }
                 });
 
+                // 保存 assistant 消息
                 const safeAssistantMsg = {
                     role: 'assistant',
                     content: assistantMsg.content || null,
@@ -232,11 +353,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
                 messages.push(safeAssistantMsg);
                 this._fullHistory.push(safeAssistantMsg);
 
+                // 保存工具结果（截断后再保存）
                 results.forEach((res, i) => {
                     const toolMsg = {
                         role: 'tool',
                         tool_call_id: assistantMsg.tool_calls[i].id,
-                        content: res
+                        content: this._truncateToolResult(res)   // 截断工具结果
                     };
                     messages.push(toolMsg);
                     this._fullHistory.push(toolMsg);
@@ -247,13 +369,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
             // 生成最终总结
             let finalText = '';
-            let isStreaming = false;   // 标记是否使用了流式输出
+            let isStreaming = false;
 
             if (allResults.length > 0) {
                 isStreaming = true;
+                // 精简的最终指令，使用 user 角色
                 messages.push({
-                    role: 'system',
-                    content: '工具调用已完成。请**不要再调用任何工具**，直接根据上面的工具执行结果，用中文生成最终分析报告或总结。直接输出文本，不要使用任何 JSON 数组或 XML 格式。'
+                    role: 'user',
+                    content: '请根据上面的工具执行结果，生成最终的中文分析报告（不要调用工具，直接输出文本）。'
                 });
 
                 this._view.webview.postMessage({ command: 'streamStart' });
@@ -289,12 +412,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
                 this._fullHistory.push({ role: 'assistant', content: finalText });
                 this._savePersistedData();
 
-                // 【关键修复】如果没有流式输出，需要手动通知前端显示助手消息
                 if (!isStreaming) {
                     this._view?.webview.postMessage({ command: 'addMessage', role: 'assistant', text: finalText });
                 }
             } else {
-                // 没有任何有效回复，也要告知前端
                 this._view?.webview.postMessage({ command: 'addMessage', role: 'assistant', text: 'AI 未给出有效回复。' });
             }
 
@@ -421,59 +542,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         }
     }
 
-    private async _loadSystemPrompt(contextInfo: string): Promise<string> {
-        const workspaceRoot = this._workspaceRoot;
-        let basePrompt: string;
-
-        if (workspaceRoot) {
-            const vscodeDir = path.join(workspaceRoot, '.vscode');
-            const projectPromptPath = path.join(vscodeDir, 'ooc-ai-prompt.txt');
-            if (fs.existsSync(projectPromptPath)) {
-                const content = fs.readFileSync(projectPromptPath, 'utf-8').trim();
-                if (content) {
-                    basePrompt = content;
-                } else {
-                    basePrompt = this._loadDefaultPrompt();
-                }
-            } else {
-                basePrompt = this._loadDefaultPrompt();
-                try {
-                    if (!fs.existsSync(vscodeDir)) fs.mkdirSync(vscodeDir, { recursive: true });
-                    fs.writeFileSync(projectPromptPath, basePrompt, 'utf-8');
-                } catch (err) {
-                    console.error('[ChatView] Failed to create default prompt file:', err);
-                }
-            }
-        } else {
-            basePrompt = this._loadDefaultPrompt();
-        }
-
-        try {
-            const projName = await this._getMcpProjectName();
-            if (projName) {
-                contextInfo += `\nCurrent MCP project name: "${projName}" (use this as 'project' parameter in MCP tools)`;
-            }
-        } catch (e) {
-            console.error('[ChatView] Failed to get MCP project name:', e);
-        }
-
-        try {
-            const mcpTools = await this.mcpClient.getTools();
-            if (mcpTools.length > 0) {
-                const toolLines = mcpTools.map((t: any) => {
-                    const required = t.inputSchema?.required || [];
-                    const reqStr = required.length > 0 ? `【必填：${required.join(', ')}】` : '';
-                    return `- ${t.name} ${reqStr}：${t.description?.split('.')[0] || ''}`;
-                });
-                basePrompt += `\n\n## 当前可用的 MCP 分析工具\n${toolLines.join('\n')}`;
-            }
-        } catch (e) {
-            console.error('[ChatView] Failed to attach MCP tools to prompt:', e);
-        }
-
-        return basePrompt.replace('${contextInfo}', contextInfo);
-    }
-
+    // 原 _loadSystemPrompt 已拆分为 _loadBasePrompt + _buildDynamicContext，不再需要
     private _loadDefaultPrompt(): string {
         const defaultPromptPath = path.join(this._context.extensionPath, 'resources', 'default-prompt.txt');
         if (!fs.existsSync(defaultPromptPath)) {
@@ -504,7 +573,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
                     }));
 
                     const toolMap = new Map<string, any>();
-
                     OOC_TOOLS.forEach(t => toolMap.set(t.function.name, t));
 
                     openAiFormatted.forEach(t => {
@@ -564,7 +632,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
                     });
 
                     this._allTools = Array.from(toolMap.values());
-
                     console.log('[MCP] Total tools:', this._allTools.length);
                     vscode.window.showInformationMessage(`MCP 已就绪，提供 ${mcpTools.length} 个分析工具`);
                     return;
@@ -671,9 +738,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
                 shell: 'cmd.exe'
             });
             const output = (stdout + stderr).trim();
-            const maxLength = 2000;
-            const truncated = output.length > maxLength 
-                ? output.substring(0, maxLength) + '\n... [输出已截断]'
+            const truncated = output.length > 2000 
+                ? output.substring(0, 2000) + '\n... [输出已截断]'
                 : output;
             return `✅ 命令执行成功，退出码 0\n${truncated || '(无输出)'}`;
         } catch (err: any) {

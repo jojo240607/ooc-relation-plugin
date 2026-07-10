@@ -8,10 +8,8 @@ export { quickOverrideMethod } from './quickOverrideMethod';
 export { quickAddMembers } from './quickAddMembers';
 export { quickAddRegularMethods } from './quickAddRegularMethods';
 export { quickWriteCode } from './quickWriteCode';
-export { quickModifyFunction } from './quickModifyFunction';
-export { quickAddPrivateFunction } from './quickCodeModifications';
-export { quickAddGlobalVariable } from './quickCodeModifications';
-export { quickAddInclude } from './quickCodeModifications';    
+export { quickWriteCodeToPath } from './quickWriteCode';
+export { quickModifyFunction, quickAddInclude, quickAddGlobalVariable, quickAddPrivateFunction, quickSetCodeSection } from './quickCodeModifications';    
 export { quickReadSource } from './quickReadSource';
 
 // 也可以在此统一定义类型，如命令返回结果等

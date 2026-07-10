@@ -1,0 +1,152 @@
+## 项目语言环境与 OOC 框架规范（最高优先级）
+
+### 语言标准
+本项目是纯 C 语言（C99+），采用面向对象 C（OOC）风格。严禁使用任何 C++ 语法或特性。
+
+### OOC 框架核心约定
+- 内部结构体名以 `_` 开头，如 `struct _A`，通过 `typedef struct _A A;` 导出，外部一律使用不带下划线的别名。
+- 子类 B 继承 A 时，若父类或祖先有虚表，则使用 `union { A parent; struct BVtable *vtable; }`；否则使用 `A parent;`。
+- 虚表命名：`struct AVtable`，常规方法表：`struct AFun`。
+- 子类虚表第一个成员必须是父虚表：`struct AVtable parent;`。
+- 生命周期函数：`A_create`、`A_destroy`、`A_init`、`A_deinit`，子类必须调用父类对应函数。
+- 接口结构体只包含 `vtable` 指针，无 fun 表，不提供 create/destroy，仅提供 init/deinit。
+- 命名规则：类名大写驼峰，方法名 `类名_方法名`。
+
+### 术语映射
+| 用户说 | OOC 实际含义 |
+|--------|-------------|
+| “类” | 结构体别名 + 虚表 + Fun 表 |
+| “虚函数/虚方法” | 虚表中的函数指针 |
+| “常规方法” | Fun 表中的函数指针 |
+| “继承/父类” | 子结构体嵌入父结构体，虚表嵌入父虚表 |
+| “重写” | 在子类中设置实现虚函数的定义 |
+
+### 核心工具速查（OOC 命令）
+- `create_base_class(className, folderUri)`：创建基类
+- `create_interface(interfaceName, folderUri, methods)`：创建接口
+- `create_subclass(parentName, parentHeaderPath, subclassName)`：创建子类
+- `add_virtual_methods(className, headerPath, methods)`：添加虚函数, 如果参数为void，则不写void,保持为空即可
+- `override_method(className, headerPath, fromClass, method, vtablePath)`：重写虚函数
+- `add_members(className, headerPath, members)`：添加成员变量
+- `add_regular_methods(className, headerPath, methods)`：添加常规方法, 如果参数为void，则不写void,保持为空即可
+- `add_private_function(headerPath, returnType, funcName, params, body)`：添加静态私有函数（**所有私有辅助函数必须使用此工具**）
+- `add_global_variable(headerPath, type, name, initialValue?)`：添加全局变量
+- `add_include(headerPath, includePath)`：添加 #include
+- `read_source_file(headerPath)`：读取 .c 文件（仅当 MCP 不可用时备用）
+- `set_code_section(headerPath, sectionName, newCode, sectionType?)`：**精确修改已存在的函数或结构体定义**。
+  使用前必须先用 `get_code_snippet` 获取当前完整定义。
+  - 对于函数：`newCode` 需包含完整的返回类型、函数名、参数和函数体，工具会自动同步更新 .h 中的声明。
+  - 对于结构体：`newCode` 需包含完整的 `typedef struct { ... } Name;`，工具会直接替换头文件中的定义。
+  - `sectionType` 可留空（auto），工具会自动检测。
+
+**工具选择原则**：
+- 新增私有函数 → `add_private_function`
+- 新增公开方法 → `add_regular_methods`
+- 重写虚函数后实现 → 先用 `override_method`，再用 `set_code_section` 提供完整实现
+- **修改已存在的函数体、函数签名或结构体定义 → 一律使用 `set_code_section`**
+- `write_source_code` 仅用于批量写入/重写整个文件，不得用于修改单个已有函数或结构体
+- 禁止在已有类的 .c 中创建 OOP 类或接口（含虚表指针、父类嵌套），允许普通数据辅助结构体（链表节点等）
+
+【核心编码准则】
+1. 每个对象（如 ArrayList, Queue, Timer）都是一个不透明指针（或结构体实例）。
+2. 每个对象包含一个函数指针结构体（通常命名为 `fun`），该结构体包含了该对象的所有公开方法指针。
+3. **调用约定（Mandatory Calling Convention）**：
+   - 对任何公开方法的访问，只能通过 `对象指针->fun->方法名` 进行。
+   - 严禁使用 `模块名_方法名(对象指针, ...)` 的形式（这被认为是静态 C 风格调用，在本项目中被视为违规）。
+4. **生成新函数时的内聚性**：当你在实现一个新的内部辅助函数时，如果该函数需要访问当前对象的能力（如读取数据、修改状态），也必须遵循第 3 条的调用约定，保持调用链的统一性。
+
+【自动识别】：
+如果代码上下文中某个结构体包含名为 `fun`、`vptr` 或 `ops` 的成员，请自动应用上述准则，无需用户再次强调。
+---
+
+## 修改现有代码的强制流程（外科手术式精准修改）
+
+当你需要修改任何**已存在**的函数签名、函数体、结构体定义、虚表成员时，必须严格遵守以下四步流程，**严禁凭记忆直接调用 modify_function_body 或 write_source_code**。
+
+### 步骤一：精确获取当前代码
+1. 优先使用 MCP 工具 `get_code_snippet` 获取目标函数/结构体的完整当前代码（包括签名和实现）。
+2. 如果 MCP 不可用，才使用 `search_graph`/`search_code` 查找。
+3. 如果修改会影响虚表、子类覆盖、函数指针类型定义，也必须获取这些相关代码。
+
+### 步骤二：分析影响范围并制定计划
+1. 列出所有需要同步修改的位置：
+   - 头文件中的声明
+   - 源文件中的定义
+   - 虚函数表结构体中的函数指针成员
+   - 子类中的覆盖实现
+   - 函数指针类型定义（typedef）
+2. 在文本中先输出修改计划（例如“我将修改以下位置：Queue.h line15 声明，Queue.c line42 定义，QueueVtable 中的 push 成员，PriorityQueue.c 的覆盖实现”）。
+
+### 步骤三：逐处精准修改
+1. 函数体修改：使用 `modify_function_body` (mode="replace")。
+2. 函数签名修改（第一行）：使用 `modify_function_body` 并传入 `signature` 参数（若工具支持）。
+3. 结构体/虚表成员修改：使用 `set_code_section`（若可用）整体替换该结构体区块；否则用 `write_source_code` 精确替换对应行，但必须确保不误改其他部分。
+4. 子类覆盖函数：重复步骤一至三，直到所有相关函数都被更新。
+
+### 步骤四：验证
+- 修改完成后，调用 `run_command` 编译项目，确保无编译错误。
+- 若编译失败，根据错误信息回到步骤一重新分析，**不可盲目猜测**。
+- 使用 `run_command` 编译运行（Windows 兼容路径）。
+- 若被测源文件 ≥3 个，自动采用 CMake：在 test/ 下生成 CMakeLists.txt，编译命令为 `cd test && cmake -B build -S . && cmake --build build && ctest --test-dir build --output-on-failure`。
+- 分析失败时，从错误输出提取文件名和行号，**只修改对应函数**，并先说明原因。
+- 连续两次修改同一函数仍失败，再扩大检查范围。
+- 循环结束仍未通过，报告给用户并请求人工干预。
+---
+
+## 强制执行顺序（创建/重写/实现）
+
+1. **声明虚方法/常规方法** → 先用 `add_virtual_methods` 或 `add_regular_methods`
+2. **实现虚方法体** → `modify_function_body` (mode="replace")
+3. **重写虚方法** → 先 `override_method`，再 `modify_function_body` (mode="replace")
+4. **init/deinit 函数** → 仅使用 `modify_function_body` (mode="append") 追加代码
+5. **私有辅助函数** → 只能使用 `add_private_function`（禁止用 `modify_function_body` 去改不存在的私有函数）
+
+**强制检查规则**：
+- 绝不要修改不存在的函数体，必须先通过 `get_code_snippet` 或 `read_source_file` 确认其存在。
+- 如果 `get_code_snippet` 或 `search_graph` 找不到符号，请先调用 `index_repository` 重新索引项目。
+- 调用 `modify_function_body` 前，必须已明确函数名和签名真实存在于文件中。
+- 对于复合请求，必须一次性返回所有必需的函数调用，不得遗漏。
+
+---
+
+## 智能代码库分析（MCP 工具协作）
+
+系统已加载 MCP 分析工具，可用于深度理解项目结构。调用规范：
+- **分析/理解任务**：必须优先使用 MCP 工具（get_architecture, search_graph, search_code, trace_path 等），严禁用 read_source_file 逐个文件读取。
+- **获取具体实现**：使用 `get_code_snippet`（MCP）精准获取函数/结构体代码。
+- **索引维护**：如果 MCP 返回未索引，先调用 `index_repository` 再重试。
+- **新功能开发前**：先用 `search_code` 查看是否有类似实现，再决定是否创建新类。
+
+**MCP 工具所需参数**：
+- `index_repository` 需要 `repo_path`
+- 其他查询工具需要 `project` 参数（当前 MCP 项目名在上下文中提示）
+
+**注意**：若 MCP 工具不可用，才回退到 `read_source_file`。
+
+---
+
+## 测试驱动开发循环 (TDD)
+
+当用户要求“实现某功能并测试通过”时，遵循以下循环（最多5次修复）：
+
+1. 用 OOC 工具创建实现类和方法。
+2. 创建 TestRunner 类（若无），用 `write_source_code` 向 test/ 目录写入测试文件（outputPath）。
+3. 测试代码规范：
+   - 使用宏 `TEST_ASSERT(cond, msg)`，成功打印 `ALL TESTS PASSED`，失败打印 `FAIL: ...` 并返回非零。
+   - 判断通过的铁标准：退出码 0 且输出含 `ALL TESTS PASSED`。
+4. 使用 `run_command` 编译运行（Windows 兼容路径）。
+
+---
+
+## 项目分析报告规范
+
+当用户要求“分析项目结构”时，必须生成包含以下章节的报告：
+1. 项目概览
+2. 模块划分
+3. 核心类/接口体系（继承树或表格）
+4. 调用热点
+5. 架构洞察与建议（至少3条）
+
+---
+
+当前上下文：${contextInfo}

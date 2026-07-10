@@ -6,8 +6,7 @@
     "vscode": "^1.86.0"
   },
   "activationEvents": [
-    "onStartupFinished",
-    "onChatParticipant:ooc-ai-agent"
+    "onStartupFinished"
   ],
   "icon": "resources/ooc-icon.png",
   "main": "./out/extension.js",
@@ -23,19 +22,63 @@
                 "type": "string",
                 "default": "",
                 "description": "DeepSeek API Key for AI features"
+            },
+            "deepseek.model": {
+              "type": "string",
+              "enum": ["deepseek-v4-flash", "deepseek-v4-pro"],
+              "default": "deepseek-v4-pro",
+              "description": "要使用的 DeepSeek 模型名称"
+            },
+            "deepseek.thinkingEnabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "是否启用思考模式（thinking）"
+            },
+            "deepseek.reasoningEffort": {
+              "type": "string",
+              "enum": ["high", "max"],
+              "default": "high",
+              "description": "推理力度，仅在 thinking 启用时有效"
+            },
+            "deepseek.stream": {
+              "type": "boolean",
+              "default": false,
+              "description": "是否启用流式输出"
+            },
+            "deepseek.maxTokens": {
+              "type": "integer",
+              "default": 4096,
+              "minimum": 1,
+              "maximum": 8192,
+              "description": "最大输出 token 数"
+            },
+            "deepseek.temperature": {
+              "type": "number",
+              "default": 0.7,
+              "minimum": 0,
+              "maximum": 2,
+              "description": "温度参数（随机性），0~2"
             }
         }
     },
-    "chatParticipants": [
+    "viewsContainers": {
+      "panel": [
         {
-            "id": "ooc-ai-agent",
-            "name": "ooc-ai-agent",
-            "description": "Generate OOC classes using natural language",
-            "isSticky": false,
-            "commands": []
+          "id": "ooc-chat",
+          "title": "OOC AI Chat",
+          "icon": "resources/ooc-icon.png"
         }
-    ],
+      ]
+    },
     "views": {
+      "ooc-chat": [
+        {
+          "type": "webview",
+          "id": "ooc-ai-chat-view",
+          "icon": "resources/vtable-has.svg",
+          "name": "AI 助手"
+        }
+      ],
       "explorer": [
         {
           "id": "ooc-inheritance-view",
@@ -77,6 +120,14 @@
       {
         "command": "ooc.showClassDiagram",
         "title": "OOC: Show Class Diagram"
+      },
+      {
+        "command": "ooc.openAiChat",
+        "title": "OOC: Open AI Chat"
+      },
+      {
+          "command": "extension.showMCPTestPanel",
+          "title": "Show MCP Tool Tester"
       }
     ],
     "menus": {
@@ -115,6 +166,10 @@
           "command": "ooc.addMembers",
           "when": "resourceFilename =~ /\\.h$/",
           "group": "navigation@7"
+        },
+        {
+          "command": "extension.showMCPTestPanel",
+          "group": "navigation@8"
         }
       ],
       "view/item/context": [
@@ -122,6 +177,13 @@
           "command": "ooc.showClassDiagram",
           "when": "view == ooc-inheritance-view",
           "group": "inline"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "ooc.openAiChat",
+          "when": "view == ooc-inheritance-view",
+          "group": "navigation"
         }
       ]
     }

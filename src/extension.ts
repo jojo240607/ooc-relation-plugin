@@ -11,9 +11,11 @@ import { addMembers } from './commands/addMembers';
 import { showClassDiagram } from './commands/showClassDiagram';
 import { InheritanceNode } from './inheritanceTreeProvider';
 import * as quickCommands from './commands/quickCommands';
-import { activateChatParticipant } from './chatParticipant';
+import { ChatViewProvider } from './ai/chatViewProvider';
+import { McpClient } from './mcp/mcpClient';
+import { showMCPPanel } from './commands/showMCPPanel';
 
-
+let mcpClient: McpClient;   // 导出供命令使用
 export function activate(context: vscode.ExtensionContext) {
     console.log('OOC Relation Plugin is now active!');
 
@@ -29,13 +31,39 @@ export function activate(context: vscode.ExtensionContext) {
         showCollapseAll: true
     });
     context.subscriptions.push(treeView);
-
+    // 注册侧边栏聊天视图
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+    mcpClient = new McpClient(context, workspaceRoot);
+    const chatProvider = new ChatViewProvider(context, mcpClient);
+    let debounceTimer: NodeJS.Timeout | null = null;
     // 当关系表变化时，自动刷新树视图
     syncService.onRelationsChanged(() => {
         console.log('[SyncService] onRelationsChanged triggered');
         treeProvider.refresh();
     });
 
+    syncService.onAnyFileChange((event) => {
+        // 只处理工作区内的文件（可选）
+        if (!event.uri.fsPath.startsWith(workspaceRoot)) return;
+
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            mcpClient.syncIndex(workspaceRoot, 'fast')
+                .then(result => {
+                    if (result.success) {
+                        console.log('[MCP] Index auto-updated');
+                    } else {
+                        console.warn('[MCP] Index update failed:', result.message);
+                    }
+                })
+                .catch(err => console.error('[MCP] Index error:', err));
+            debounceTimer = null;
+        }, 300); // 300ms 防抖延迟
+    });
+
+    context.subscriptions.push(
+        vscode.window.registerWebviewViewProvider('ooc-ai-chat-view', chatProvider)
+    );
     // 注册命令（不再需要手动 treeProvider.refresh()，事件会自动刷新）
     context.subscriptions.push(
         vscode.commands.registerCommand('ooc.createClass', async (uri?: vscode.Uri) => {
@@ -122,8 +150,14 @@ export function activate(context: vscode.ExtensionContext) {
         }),
         vscode.commands.registerCommand('ooc.quickReadSource', async (headerUri: vscode.Uri) => {
             return await quickCommands.quickReadSource(headerUri);
+        }),
+        vscode.commands.registerCommand('ooc.openAiChat', () => {
+            vscode.commands.executeCommand('workbench.action.focusPanel');
+        }),
+        vscode.commands.registerCommand('extension.showMCPTestPanel', () => {
+            showMCPPanel(context, mcpClient)
         })
-    );
+        );
 
     // 清理
     context.subscriptions.push({
@@ -131,7 +165,9 @@ export function activate(context: vscode.ExtensionContext) {
     });
     console.log('Before activateChatParticipant');
     // 启动 AI Chat Participant
-    activateChatParticipant(context);
+    //activateChatParticipant(context);
+        // 激活 AI Webview 聊天面板
+  //  activateWebviewChat(context);
     console.log('After activateChatParticipant');
 }
 

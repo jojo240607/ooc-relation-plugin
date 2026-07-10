@@ -7,5 +7,5 @@ export async function quickCreateSubclass(
     subclassName: string,
     targetFolderUri?: vscode.Uri
 ): Promise<{ success: boolean; message: string }> {
-    return await createSubclassFiles(parentName, parentUri, subclassName, targetFolderUri, false);
+    return await createSubclassFiles(parentName, parentUri, subclassName, targetFolderUri, false, true);
 }

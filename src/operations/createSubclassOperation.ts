@@ -16,7 +16,8 @@ export async function createSubclassFiles(
     parentHeaderUri: vscode.Uri,
     subclassName: string,
     targetFolderUri?: vscode.Uri,
-    force: boolean = false
+    force: boolean = false,
+    silent: boolean = false
 ): Promise<{ success: boolean; message: string; relativePath?: string }> {
     try {
         const targetDir = targetFolderUri || vscode.Uri.joinPath(parentHeaderUri, '..');
@@ -44,10 +45,11 @@ export async function createSubclassFiles(
             await syncService.registerClass(parentName, parentRelativePath, null, false);
         }
 
-        // 打开生成的头文件
-        const doc = await vscode.workspace.openTextDocument(headerUri);
-        await vscode.window.showTextDocument(doc, { preview: false });
-
+        if (!silent) {
+            // 打开生成的头文件
+            const doc = await vscode.workspace.openTextDocument(headerUri);
+            await vscode.window.showTextDocument(doc, { preview: false });
+        }
         return { success: true, message: `Subclass ${subclassName} extending ${parentName} created at ${relativePath}`, relativePath };
     } catch (err: any) {
         return { success: false, message: `Error creating subclass: ${err.message}` };

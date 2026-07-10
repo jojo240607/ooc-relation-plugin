@@ -9,7 +9,8 @@ import { syncService } from '../sync/ClassSyncService'; // 根据你的实际路
  */
 export async function createClassFiles(
     className: string,
-    targetDirUri: vscode.Uri
+    targetDirUri: vscode.Uri,
+    silent: boolean = false
 ): Promise<{ success: boolean; message: string; relativePath?: string }> {
     try {
         const headerUri = vscode.Uri.joinPath(targetDirUri, `${className}.h`);
@@ -29,10 +30,11 @@ export async function createClassFiles(
         const relativePath = vscode.workspace.asRelativePath(headerUri);
         await syncService.registerClass(className, relativePath, null, false);
 
-        // 打开生成的头文件
-        const doc = await vscode.workspace.openTextDocument(headerUri);
-        await vscode.window.showTextDocument(doc, { preview: false });
-
+        if (!silent) {
+            // 打开生成的头文件
+            const doc = await vscode.workspace.openTextDocument(headerUri);
+            await vscode.window.showTextDocument(doc, { preview: false });
+        }
         return { success: true, message: `Base class ${className} created at ${relativePath}`, relativePath };
     } catch (err: any) {
         return { success: false, message: `Error creating class: ${err.message}` };

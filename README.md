@@ -151,7 +151,7 @@ text
 
 AI 将按顺序自动完成：创建类、添加虚函数、创建接口、创建子类、重写方法、添加常规方法、添加成员变量，**全程无需手动操作**。
 
-![](resources\screencat\ai_coding.png)
+![](resources/screencat/ai_coding.png)
 
 #### 更多 AI 能力：
 

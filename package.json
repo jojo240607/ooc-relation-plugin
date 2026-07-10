@@ -16,50 +16,56 @@
   },
   "contributes": {
     "configuration": {
-        "title": "OOC Relation Plugin",
-        "properties": {
-            "ooc-relation.apiKey": {
-                "type": "string",
-                "default": "",
-                "description": "DeepSeek API Key for AI features"
-            },
-            "deepseek.model": {
-              "type": "string",
-              "enum": ["deepseek-v4-flash", "deepseek-v4-pro"],
-              "default": "deepseek-v4-pro",
-              "description": "要使用的 DeepSeek 模型名称"
-            },
-            "deepseek.thinkingEnabled": {
-              "type": "boolean",
-              "default": true,
-              "description": "是否启用思考模式（thinking）"
-            },
-            "deepseek.reasoningEffort": {
-              "type": "string",
-              "enum": ["high", "max"],
-              "default": "high",
-              "description": "推理力度，仅在 thinking 启用时有效"
-            },
-            "deepseek.stream": {
-              "type": "boolean",
-              "default": false,
-              "description": "是否启用流式输出"
-            },
-            "deepseek.maxTokens": {
-              "type": "integer",
-              "default": 4096,
-              "minimum": 1,
-              "maximum": 8192,
-              "description": "最大输出 token 数"
-            },
-            "deepseek.temperature": {
-              "type": "number",
-              "default": 0.7,
-              "minimum": 0,
-              "maximum": 2,
-              "description": "温度参数（随机性），0~2"
-            }
+      "title": "OOC Relation Plugin",
+      "properties": {
+        "ooc-relation.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "DeepSeek API Key for AI features"
+        },
+        "deepseek.model": {
+          "type": "string",
+          "enum": [
+            "deepseek-v4-flash",
+            "deepseek-v4-pro"
+          ],
+          "default": "deepseek-v4-pro",
+          "description": "要使用的 DeepSeek 模型名称"
+        },
+        "deepseek.thinkingEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "是否启用思考模式（thinking）"
+        },
+        "deepseek.reasoningEffort": {
+          "type": "string",
+          "enum": [
+            "high",
+            "max"
+          ],
+          "default": "high",
+          "description": "推理力度，仅在 thinking 启用时有效"
+        },
+        "deepseek.stream": {
+          "type": "boolean",
+          "default": false,
+          "description": "是否启用流式输出"
+        },
+        "deepseek.maxTokens": {
+          "type": "integer",
+          "default": 4096,
+          "minimum": 1,
+          "maximum": 8192,
+          "description": "最大输出 token 数"
+        },
+        "deepseek.temperature": {
+          "type": "number",
+          "default": 0.7,
+          "minimum": 0,
+          "maximum": 2,
+          "description": "温度参数（随机性），0~2"
         }
+      }
     },
     "viewsContainers": {
       "panel": [
@@ -126,8 +132,8 @@
         "title": "OOC: Open AI Chat"
       },
       {
-          "command": "extension.showMCPTestPanel",
-          "title": "Show MCP Tool Tester"
+        "command": "extension.showMCPTestPanel",
+        "title": "Show MCP Tool Tester"
       }
     ],
     "menus": {
@@ -196,7 +202,7 @@
   "devDependencies": {
     "@types/node": "^10.17.60",
     "@types/plantuml-encoder": "^1.4.2",
-    "@types/vscode": "^1.70.0",
+    "@types/vscode": "^1.125.0",
     "typescript": "^4.9.0"
   },
   "dependencies": {

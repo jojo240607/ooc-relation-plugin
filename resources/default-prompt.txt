@@ -25,10 +25,10 @@
 - `create_base_class(className, folderUri)`：创建基类
 - `create_interface(interfaceName, folderUri, methods)`：创建接口
 - `create_subclass(parentName, parentHeaderPath, subclassName)`：创建子类
-- `add_virtual_methods(className, headerPath, methods)`：添加虚函数, 如果参数为void，则不写void,保持为空即可
+- `add_virtual_methods(className, headerPath, methods)`：添加虚函数, 如果参数为void，则不写void,保持为空即可,参数中不必添加self指针参数，工具会自动添加
 - `override_method(className, headerPath, fromClass, method, vtablePath)`：重写虚函数
 - `add_members(className, headerPath, members)`：添加成员变量
-- `add_regular_methods(className, headerPath, methods)`：添加常规方法, 如果参数为void，则不写void,保持为空即可
+- `add_regular_methods(className, headerPath, methods)`：添加常规方法, 如果参数为void，则不写void,保持为空即可,参数中不必添加self指针参数，工具会自动添加
 - `add_private_function(headerPath, returnType, funcName, params, body)`：添加静态私有函数（**所有私有辅助函数必须使用此工具**）
 - `add_global_variable(headerPath, type, name, initialValue?)`：添加全局变量
 - `add_include(headerPath, includePath)`：添加 #include

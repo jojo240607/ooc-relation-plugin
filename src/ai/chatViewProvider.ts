@@ -197,44 +197,78 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
     // ========== 新增：历史摘要与压缩 ==========
     private async _maybeSummarizeHistory(): Promise<void> {
-        const SUMMARY_THRESHOLD = 30; // 消息条数阈值
-        if (this._fullHistory.length <= SUMMARY_THRESHOLD) return;
+        const MAX_TURNS = 3;  // 保留最近 3 个完整对话轮次
 
-        // 保留最近 10 条消息，其余部分生成摘要
-        const recentCount = 10;
-        const oldMessages = this._fullHistory.slice(0, this._fullHistory.length - recentCount);
-        const recentMessages = this._fullHistory.slice(-recentCount);
+        // 按轮次拆分历史（每个轮次以 user 消息开始）
+        const turns: any[][] = [];
+        let currentTurn: any[] = [];
+        for (const msg of this._fullHistory) {
+            if (msg.role === 'user' && currentTurn.length > 0) {
+                turns.push(currentTurn);
+                currentTurn = [];
+            }
+            currentTurn.push(msg);
+        }
+        if (currentTurn.length > 0) turns.push(currentTurn);
+
+        // 如果轮次数量不超过 MAX_TURNS，不需要压缩
+        if (turns.length <= MAX_TURNS) return;
+
+        // 旧轮次用于生成摘要，新轮次保留
+        const oldTurns = turns.slice(0, turns.length - MAX_TURNS);
+        const recentTurns = turns.slice(-MAX_TURNS);
 
         try {
+            // 将旧轮次合并成消息列表用于摘要
+            const oldMessages = oldTurns.flat();
             const summary = await this._summarizeConversation(oldMessages);
             if (summary) {
-                // 用摘要替代旧消息，放入 user 消息
+                // 重建 _fullHistory：摘要 + 最近轮次（确保以 user 消息开始）
                 this._fullHistory = [
                     { role: 'user', content: `[历史对话摘要]\n${summary}` },
-                    ...recentMessages
+                    ...recentTurns.flat()
                 ];
 
-                // 同步压缩 chatHistory（前端显示用）
-                // 取出 chatHistory 中对应旧消息的部分（简单处理：保留最后 5 轮用户/助手对话）
-                const oldChatMessages = this._chatHistory.slice(0, Math.max(0, this._chatHistory.length - 5));
+                // 同步压缩前端 chatHistory（保留最近 5 条用户/助手对话）
+                const recentChatMessages = this._chatHistory.slice(-5);
+                const oldChatMessages = this._chatHistory.slice(0, -5);
                 if (oldChatMessages.length > 0) {
                     const chatSummary = await this._summarizeConversation(
                         oldChatMessages.map(m => ({ role: m.role, content: m.text }))
                     );
                     this._chatHistory = [
                         { role: 'system', text: `对话摘要：${chatSummary}` },
-                        ...this._chatHistory.slice(-5)
+                        ...recentChatMessages
                     ];
                 }
             }
         } catch (e) {
             console.error('[ChatView] History summarization failed, falling back to truncation:', e);
-            // 摘要失败时，直接丢弃最旧的消息，保留最近 20 条
-            this._fullHistory = this._fullHistory.slice(-20);
+            // 降级：直接丢弃最旧的轮次，保留最近 MAX_TURNS 个轮次
+            this._fullHistory = recentTurns.flat();
             this._chatHistory = this._chatHistory.slice(-10);
         }
     }
 
+    private _ensureValidToolSequence(messages: any[]): any[] {
+        const valid: any[] = [];
+        for (let i = 0; i < messages.length; i++) {
+            const msg = messages[i];
+            if (msg.role === 'tool') {
+                // 确保前一条是带有 tool_calls 的 assistant 消息
+                const prev = valid[valid.length - 1];
+                if (prev && prev.role === 'assistant' && prev.tool_calls) {
+                    valid.push(msg);
+                } else {
+                    // 跳过孤立的 tool 消息
+                    console.warn('[ChatView] Skipping orphan tool message:', msg.tool_call_id);
+                }
+            } else {
+                valid.push(msg);
+            }
+        }
+        return valid;
+    }
     private async _summarizeConversation(messages: any[]): Promise<string> {
         // 仅提取 user 和 assistant 的文本内容，避免工具调用细节干扰
         const textPairs = messages
@@ -298,6 +332,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
         // 历史中不应再有 system 消息，但安全起见过滤掉
         const cleanHistory = this._fullHistory.filter(m => m.role !== 'system');
+        const validHistory = this._ensureValidToolSequence(cleanHistory);
+        messages.push(...validHistory);
         messages.push(...cleanHistory);
 
         let allResults: string[] = [];

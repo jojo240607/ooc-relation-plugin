@@ -18,10 +18,21 @@
     "configuration": {
       "title": "OOC Relation Plugin",
       "properties": {
+        "ooc-relation.aiProvider": {
+            "type": "string",
+            "enum": ["deepseek", "hy3"],
+            "default": "hy3",
+            "description": "选择使用的 AI 服务商"
+        },
         "ooc-relation.apiKey": {
           "type": "string",
           "default": "",
           "description": "DeepSeek API Key for AI features"
+        },
+        "ooc-relation.hy3apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Hy3 API Key for AI features"
         },
         "deepseek.model": {
           "type": "string",

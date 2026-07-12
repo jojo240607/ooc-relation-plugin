@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { relationStore } from '../sync/ClassRelationStore';
-import { FunctionCall } from './deepseekClient';
+import { FunctionCall } from './aiClient';
 import * as quickCommands from '../commands/quickCommands';
 
 function isAlreadyExists(msg: string): boolean {

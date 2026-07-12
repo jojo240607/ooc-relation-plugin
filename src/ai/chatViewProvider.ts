@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { callDeepSeekForFunctionCalls, callDeepSeekForText, streamDeepSeekForText } from './deepseekClient';
+import { callAIForFunctionCalls, callAIForText, streamAIForText } from './aiClient';
 import { OOC_TOOLS } from './tools';
 import { executeFunctionCalls } from './agentExecutor';
 import { relationStore } from '../sync/ClassRelationStore';
@@ -283,7 +283,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
             { role: 'user', content: textPairs }
         ];
 
-        return await callDeepSeekForText(summaryMessages);
+        return await callAIForText(summaryMessages);
     }
 
     private async _handleAsk(userInput: string) {
@@ -341,7 +341,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
         try {
             for (let step = 0; step < maxSteps; step++) {
-                const result = await callDeepSeekForFunctionCalls(messages, this._allTools, step === 0);
+                const result = await callAIForFunctionCalls(messages, this._allTools, step === 0);
                 const calls = result.calls;
                 const assistantMsg = result.assistantMessage;
                 if (calls.length === 0) break;
@@ -417,7 +417,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
                 this._view.webview.postMessage({ command: 'streamStart' });
                 try {
-                    const stream = streamDeepSeekForText(messages);
+                    const stream = streamAIForText(messages);
                     for await (const chunk of stream) {
                         if (chunk.type === 'reasoning') {
                             this._view?.webview.postMessage({ command: 'streamThinking', text: chunk.text });
@@ -562,7 +562,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
     private async _getAiTextResponse(messages: any[]): Promise<string> {
         try {
-            return await callDeepSeekForText(messages);
+            return await callAIForText(messages);
         } catch (err) {
             console.error('Failed to get AI text response:', err);
             return '';

@@ -203,7 +203,7 @@
     "@types/node": "^10.17.60",
     "@types/plantuml-encoder": "^1.4.2",
     "@types/vscode": "^1.125.0",
-    "typescript": "^4.9.0"
+    "typescript": "^4.9.5"
   },
   "dependencies": {
     "plantuml-encoder": "^1.4.0"

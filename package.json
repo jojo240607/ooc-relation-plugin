@@ -19,10 +19,13 @@
       "title": "OOC Relation Plugin",
       "properties": {
         "ooc-relation.aiProvider": {
-            "type": "string",
-            "enum": ["deepseek", "hy3"],
-            "default": "hy3",
-            "description": "选择使用的 AI 服务商"
+          "type": "string",
+          "enum": [
+            "deepseek",
+            "hy3"
+          ],
+          "default": "hy3",
+          "description": "选择使用的 AI 服务商"
         },
         "ooc-relation.apiKey": {
           "type": "string",
@@ -213,7 +216,7 @@
   "devDependencies": {
     "@types/node": "^10.17.60",
     "@types/plantuml-encoder": "^1.4.2",
-    "@types/vscode": "^1.125.0",
+    "@types/vscode": "^1.86.0",
     "typescript": "^4.9.5"
   },
   "dependencies": {
